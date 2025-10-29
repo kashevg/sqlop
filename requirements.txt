@@ -1,0 +1,17 @@
+# Core dependencies
+streamlit>=1.30.0
+google-genai>=0.8.0
+psycopg[binary]>=3.1.0
+psycopg-pool>=3.2.0
+
+# Data processing and visualization
+pandas>=2.0.0
+seaborn>=0.13.0
+matplotlib>=3.7.0
+
+# SQL parsing and utilities
+sqlparse>=0.4.4
+python-dotenv>=1.0.0
+
+# Optional observability
+langfuse>=2.0.0
