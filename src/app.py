@@ -2,19 +2,20 @@
 
 TODO: Implementation Status (check STATUS.md for current progress)
 --------------------------------------------------------------
-PHASE 1 - Data Generation (Not Implemented Yet):
-  - [ ] Gemini client wrapper (src/utils/gemini_client.py)
-  - [ ] DDL parser (src/tools/ddl_parser.py)
-  - [ ] Data generator (src/tools/data_generator.py)
-  - [ ] Wire to show_data_generation_tab() - lines 155-304
+PHASE 1 - Data Generation (✅ COMPLETE):
+  - [x] Gemini client wrapper (src/utils/gemini_client.py)
+  - [x] DDL parser (src/tools/ddl_parser.py)
+  - [x] Data generator (src/tools/data_generator.py)
+  - [x] Wire to show_data_generation_tab() - lines 182-418
+  - Status: Ready to test with GCP authentication
 
 PHASE 2 - Chat Interface (Not Implemented Yet):
   - [ ] NL2SQL converter (src/tools/nl2sql.py)
   - [ ] Guardrails (src/tools/guardrails.py)
   - [ ] Visualizer (src/tools/visualizer.py)
-  - [ ] Wire to show_chat_tab() - lines 306-346
+  - [ ] Wire to show_chat_tab() - lines 421-460
 
-Current Status: UI mockup complete, backend needs implementation.
+Current Status: Phase 1 MVP complete, awaiting GCP setup for testing.
 See .claude/PLAN.md for detailed task breakdown and .claude/STATUS.md for current task.
 """
 
@@ -23,6 +24,9 @@ import pandas as pd
 
 from utils.config import AppConfig
 from utils.db import DatabaseManager
+from utils.gemini_client import GeminiClient
+from tools.ddl_parser import DDLParser
+from tools.data_generator import DataGenerator
 
 
 @st.cache_resource
@@ -37,6 +41,12 @@ def get_db_manager(_config: AppConfig) -> DatabaseManager:
     db_manager = DatabaseManager(_config.database)
     db_manager.initialize()
     return db_manager
+
+
+@st.cache_resource
+def get_gemini_client(_config: AppConfig) -> GeminiClient:
+    """Get Gemini client (cached)."""
+    return GeminiClient(_config.gemini)
 
 
 def check_database_connection(db_manager: DatabaseManager) -> tuple[bool, str]:
@@ -173,6 +183,14 @@ def main():
 def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
     """Display Data Generation tab."""
 
+    # Initialize session state
+    if "generated_data" not in st.session_state:
+        st.session_state.generated_data = {}
+    if "parsed_tables" not in st.session_state:
+        st.session_state.parsed_tables = {}
+    if "ddl_content" not in st.session_state:
+        st.session_state.ddl_content = None
+
     # Hero section with slop theme
     st.markdown("# 🍲 SQL Slop Generator")
     st.markdown("_Order up! Tell me what kind of data slop you're craving, and I'll cook it up fresh_")
@@ -206,6 +224,7 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
         if uploaded_file:
             st.markdown("### 📝 Schema Preview")
             schema_content = uploaded_file.read().decode()
+            st.session_state.ddl_content = schema_content
             st.code(schema_content[:500] + ("..." if len(schema_content) > 500 else ""), language="sql")
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -252,73 +271,152 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
         generate_btn = st.button("👨‍🍳 Cook It Up!", type="primary", use_container_width=True)
 
     if generate_btn:
-        with st.spinner("🍳 Cooking your data slop..."):
-            st.info("🚧 Kitchen still under construction!")
+        if not st.session_state.ddl_content:
+            st.error("⚠️ Please upload a DDL schema first!")
+        else:
+            try:
+                with st.spinner("🍳 Cooking your data slop..."):
+                    # Parse DDL
+                    parser = DDLParser()
+                    tables = parser.parse(st.session_state.ddl_content)
+                    st.session_state.parsed_tables = tables
+
+                    if not tables:
+                        st.error("❌ No tables found in DDL. Please check your schema format.")
+                    else:
+                        st.success(f"✅ Parsed {len(tables)} tables: {', '.join(tables.keys())}")
+
+                        # Generate data
+                        gemini_client = get_gemini_client(config)
+                        generator = DataGenerator(gemini_client)
+
+                        # Progress tracking
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+
+                        generation_order = parser.get_generation_order()
+                        total_tables = len(generation_order)
+
+                        for idx, table_name in enumerate(generation_order):
+                            status_text.text(f"🍳 Cooking {table_name}... ({idx+1}/{total_tables})")
+                            table = tables[table_name]
+                            df = generator._generate_table_data(
+                                table,
+                                int(rows_per_table),
+                                prompt if prompt else "",
+                                tables
+                            )
+                            st.session_state.generated_data[table_name] = df
+                            progress_bar.progress((idx + 1) / total_tables)
+
+                        status_text.empty()
+                        progress_bar.empty()
+                        st.success(f"🍽️ Fresh slop ready! Generated {total_tables} tables with {int(rows_per_table)} rows each.")
+                        st.rerun()
+
+            except Exception as e:
+                st.error(f"❌ Kitchen mishap: {str(e)}")
+                import traceback
+                with st.expander("🔍 Error details"):
+                    st.code(traceback.format_exc())
 
     st.markdown("---")
 
     # Data Preview section with modern design
     st.markdown("## 🍽️ Fresh from the Kitchen")
 
-    col1, col2, col3 = st.columns([3, 1, 1])
-    with col1:
-        st.markdown("*Take a taste of your freshly cooked data*")
-    with col3:
-        table_selector = st.selectbox(
-            "Table",
-            ["users", "orders", "products"],
-            label_visibility="collapsed"
-        )
+    if st.session_state.generated_data:
+        # Show generated data
+        available_tables = list(st.session_state.generated_data.keys())
 
-    # Sample data table with nice formatting
-    sample_data = pd.DataFrame({
-        "ID": ["001", "002", "003"],
-        "Name": ["Alice Johnson", "Bob Smith", "Carol Williams"],
-        "Email": ["alice@example.com", "bob@example.com", "carol@example.com"],
-        "Category": ["Premium", "Standard", "Premium"],
-        "Value": ["$245.50", "$127.80", "$389.20"]
-    })
+        col1, col2, col3 = st.columns([3, 1, 1])
+        with col1:
+            st.markdown(f"*{len(available_tables)} tables ready to serve*")
+        with col3:
+            selected_table = st.selectbox(
+                "Table",
+                available_tables,
+                label_visibility="collapsed"
+            )
 
-    st.dataframe(
-        sample_data,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "ID": st.column_config.TextColumn("ID", width="small"),
-            "Name": st.column_config.TextColumn("Name", width="medium"),
-            "Email": st.column_config.TextColumn("Email", width="medium"),
-            "Category": st.column_config.TextColumn("Category", width="small"),
-            "Value": st.column_config.TextColumn("Value", width="small"),
-        }
-    )
+        # Display selected table
+        if selected_table and selected_table in st.session_state.generated_data:
+            df = st.session_state.generated_data[selected_table]
+            st.dataframe(
+                df.head(100),  # Show first 100 rows
+                use_container_width=True,
+                hide_index=True
+            )
 
-    st.markdown("<br>", unsafe_allow_html=True)
+            st.caption(f"Showing first 100 of {len(df)} rows")
 
-    # Quick edit section
-    col1, col2 = st.columns([5, 1])
-    with col1:
-        edit_instructions = st.text_input(
-            "Edit",
-            placeholder="Need adjustments? 'Add more salt' (Premium → VIP) or 'More portions' (add rows)...",
-            label_visibility="collapsed"
-        )
-    with col2:
-        submit_edit = st.button("🔧 Remix", type="secondary", use_container_width=True)
+            st.markdown("<br>", unsafe_allow_html=True)
 
-    if submit_edit and edit_instructions:
-        st.info(f"👨‍🍳 Remixing: {edit_instructions}")
+            # Quick edit section
+            col1, col2 = st.columns([5, 1])
+            with col1:
+                edit_instructions = st.text_input(
+                    "Edit",
+                    placeholder=f"Refine {selected_table}? E.g., 'More diverse names', 'Higher price range'...",
+                    label_visibility="collapsed",
+                    key=f"edit_{selected_table}"
+                )
+            with col2:
+                submit_edit = st.button("🔧 Remix", type="secondary", use_container_width=True)
 
-    # Download section
-    st.markdown("<br>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([2, 1, 2])
-    with col2:
-        st.download_button(
-            "📦 Take Out (CSV)",
-            data=sample_data.to_csv(index=False),
-            file_name="sql_slop.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+            if submit_edit and edit_instructions:
+                try:
+                    with st.spinner(f"🍳 Remixing {selected_table}..."):
+                        gemini_client = get_gemini_client(config)
+                        generator = DataGenerator(gemini_client)
+                        generator.generated_data = st.session_state.generated_data.copy()
+
+                        # Regenerate just this table
+                        df = generator.regenerate_table(
+                            selected_table,
+                            st.session_state.parsed_tables,
+                            int(rows_per_table),
+                            edit_instructions
+                        )
+                        st.session_state.generated_data[selected_table] = df
+                        st.success(f"✅ {selected_table} remixed!")
+                        st.rerun()
+
+                except Exception as e:
+                    st.error(f"❌ Remix failed: {str(e)}")
+
+            # Download section
+            st.markdown("<br>", unsafe_allow_html=True)
+            col1, col2, col3 = st.columns([2, 1, 2])
+            with col2:
+                st.download_button(
+                    "📦 Take Out (CSV)",
+                    data=df.to_csv(index=False),
+                    file_name=f"{selected_table}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
+            # Optional: Store in database
+            st.markdown("<br>", unsafe_allow_html=True)
+            col1, col2, col3 = st.columns([2, 1, 2])
+            with col2:
+                if st.button("🗄️ Store in DB", use_container_width=True):
+                    try:
+                        with st.spinner(f"Storing {selected_table} in database..."):
+                            # First ensure table exists
+                            if selected_table in st.session_state.parsed_tables:
+                                table_def = st.session_state.parsed_tables[selected_table]
+                                # Execute CREATE TABLE from DDL if needed
+                                # Then insert data
+                                db_manager.execute_insert(selected_table, df.to_dict('records'))
+                                st.success(f"✅ {len(df)} rows stored in {selected_table}!")
+                    except Exception as e:
+                        st.error(f"❌ Storage failed: {str(e)}")
+
+    else:
+        # No data generated yet - show placeholder
+        st.info("🍽️ No fresh slop yet! Upload a schema and hit 'Cook It Up!' to get started.")
 
 
 def show_chat_tab(config: AppConfig, db_manager: DatabaseManager):

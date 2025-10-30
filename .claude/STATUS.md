@@ -1,26 +1,28 @@
 # 🍜 SQLop - Current Status
 
-**Last Updated**: 2025-10-29
-**Current Phase**: MVP Phase 1 - In Progress
+**Last Updated**: 2025-10-30
+**Current Phase**: MVP Phase 1 - COMPLETE ✅
 
 ---
 
 ## 📍 WHERE WE ARE
 
-### ✅ Completed (3/13 tasks)
+### ✅ Phase 1 Complete (7/13 tasks)
 - [x] README.md - Project overview with slop theme
 - [x] PLAN.md - MVP-first implementation strategy
 - [x] SETUP.md - Detailed setup instructions
+- [x] Gemini Client (`src/utils/gemini_client.py`) - 164 lines
+- [x] DDL Parser (`src/tools/ddl_parser.py`) - 357 lines
+- [x] Data Generator (`src/tools/data_generator.py`) - 325 lines
+- [x] UI Integration - Full Phase 1 wired to `src/app.py`
 
-### ⏳ IN PROGRESS: Gemini Client Helper (95% complete)
-**File**: `src/utils/gemini_client.py` ✅ Created (159 lines)
-**Test File**: `test_gemini.py` ✅ Created
-**Status**: Code complete, pending GCP setup and testing
-**Blocker**: Need to configure GCP_PROJECT_ID in .env
+### 🎯 READY FOR TESTING
+**Status**: All Phase 1 code complete, awaiting GCP authentication
+**Action Required**: Run `gcloud auth application-default login` and add `GCP_PROJECT_ID` to `.env`
+**Test**: Upload restaurant.sql → Generate → Preview → Download CSV
 
-### 🎯 NEXT TASK: Test Gemini Client
-**Action**: Set up GCP credentials and run `python test_gemini.py`
-**Details**: Once tests pass, move to Task 2 (DDL Parser)
+### 🚀 NEXT: Phase 2 Implementation
+Once Phase 1 is tested and validated, move to natural language querying
 
 ---
 
@@ -35,25 +37,27 @@ If you're coming back after clearing context, here's your roadmap:
 
 ### 2. Check What's Already Built
 
-**Existing Code**:
+**Phase 1 Complete**:
 ```
 src/
-├── app.py (349 lines)               ✅ Streamlit UI with both tabs
+├── app.py (465 lines)               ✅ Full Phase 1 UI integration
 ├── utils/
 │   ├── config.py (75 lines)         ✅ Configuration management
 │   ├── db.py (154 lines)            ✅ Database utilities
-│   └── gemini_client.py (159 lines) ✅ Gemini wrapper (needs testing)
-└── tools/                           ⏳ Empty - needs implementation
+│   └── gemini_client.py (164 lines) ✅ Gemini wrapper
+└── tools/
+    ├── ddl_parser.py (357 lines)    ✅ Schema parser
+    └── data_generator.py (325 lines) ✅ LLM data generator
 
-test_gemini.py                       ✅ Test suite ready to run
+test_ddl_parser.py                   ✅ Parser tests (all passing)
 ```
 
 **Infrastructure**:
 - ✅ PostgreSQL running in Docker
 - ✅ Virtual environment with dependencies
-- ⚠️  .env needs GCP_PROJECT_ID or GOOGLE_API_KEY
+- ⚠️  .env needs GCP_PROJECT_ID for testing
 
-### 3. Verify Setup Still Works
+### 3. Testing Phase 1
 
 ```bash
 # Quick health check
@@ -61,21 +65,22 @@ docker ps                        # PostgreSQL should be running
 source .venv/bin/activate        # Activate venv
 python test_db.py                # Test database
 streamlit run src/app.py         # Start UI
+
+# Test data generation
+python test_ddl_parser.py        # Verify DDL parser works
 ```
 
-If any fail, check SETUP.md for troubleshooting.
+### 4. Next Steps
 
-### 4. Start Next Task
+**Option A - Test Phase 1**:
+1. Set up GCP auth: `gcloud auth application-default login`
+2. Add `GCP_PROJECT_ID` to `.env`
+3. Run Streamlit app and test full data generation workflow
 
-**Current Task: Gemini Client Helper**
+**Option B - Build Phase 2**:
+Move to natural language querying while waiting for GCP access
 
-Create `src/utils/gemini_client.py` with:
-- Vertex AI client initialization
-- `generate_text(prompt)` method
-- `generate_json(prompt, schema)` method for structured output
-- Streaming support
-
-See **PLAN.md → Task 1** for full details and acceptance criteria.
+See **PLAN.md** for Phase 2 task details.
 
 ---
 
@@ -86,18 +91,20 @@ See **PLAN.md → Task 1** for full details and acceptance criteria.
 - [x] Project structure
 - [x] Database layer
 
-### Phase 1: MVP - Data Generation (0/4 complete)
-- [ ] Task 4: Gemini client wrapper ← **YOU ARE HERE**
-- [ ] Task 5: DDL parser
-- [ ] Task 6: Data generator
-- [ ] Task 7: Wire to UI
+### Phase 1: MVP - Data Generation (4/4 complete) ✅
+- [x] Task 1: Gemini client wrapper
+- [x] Task 2: DDL parser
+- [x] Task 3: Data generator
+- [x] Task 4: Wire to UI
 
-### Phase 2: Chat with Data (0/5 complete)
-- [ ] Task 8: NL2SQL converter
-- [ ] Task 9: Guardrails
-- [ ] Task 10: Chart visualizer
-- [ ] Task 11: Wire chat to UI
-- [ ] Task 12: Test Phase 2
+**Status**: Ready for testing with GCP authentication
+
+### Phase 2: Chat with Data (0/5 complete) ← **NEXT**
+- [ ] Task 5: NL2SQL converter
+- [ ] Task 6: Guardrails
+- [ ] Task 7: Chart visualizer
+- [ ] Task 8: Wire chat to UI
+- [ ] Task 9: Test Phase 2
 
 ---
 

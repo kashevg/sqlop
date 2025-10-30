@@ -30,7 +30,7 @@ class GeminiClient:
         """Initialize the Gemini client based on authentication method."""
         if self.config.is_vertex_ai():
             # Vertex AI authentication
-            self._client = genai.Client(
+            self._client = genai.Cliwitent(
                 vertexai=True,
                 project=self.config.gcp_project_id,
                 location=self.config.gcp_location,
