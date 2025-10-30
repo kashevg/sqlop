@@ -1,4 +1,22 @@
-"""Main Streamlit application for SQLOp."""
+"""Main Streamlit application for SQLOp.
+
+TODO: Implementation Status (check STATUS.md for current progress)
+--------------------------------------------------------------
+PHASE 1 - Data Generation (Not Implemented Yet):
+  - [ ] Gemini client wrapper (src/utils/gemini_client.py)
+  - [ ] DDL parser (src/tools/ddl_parser.py)
+  - [ ] Data generator (src/tools/data_generator.py)
+  - [ ] Wire to show_data_generation_tab() - lines 155-304
+
+PHASE 2 - Chat Interface (Not Implemented Yet):
+  - [ ] NL2SQL converter (src/tools/nl2sql.py)
+  - [ ] Guardrails (src/tools/guardrails.py)
+  - [ ] Visualizer (src/tools/visualizer.py)
+  - [ ] Wire to show_chat_tab() - lines 306-346
+
+Current Status: UI mockup complete, backend needs implementation.
+See .claude/PLAN.md for detailed task breakdown and .claude/STATUS.md for current task.
+"""
 
 import streamlit as st
 import pandas as pd
