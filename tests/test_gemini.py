@@ -1,7 +1,8 @@
 """Test script for Gemini client functionality."""
 
-from src.utils.config import AppConfig
-from src.utils.gemini_client import GeminiClient
+import conftest  # Sets up sys.path
+from utils.config import AppConfig
+from utils.gemini_client import GeminiClient
 
 
 def test_text_generation():

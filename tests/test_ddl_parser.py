@@ -1,6 +1,7 @@
 """Test DDL parser with sample schemas."""
 
-from src.tools.ddl_parser import DDLParser
+import conftest  # Sets up sys.path
+from tools.ddl_parser import DDLParser
 
 
 # Sample schema: Restaurant

@@ -1,9 +1,10 @@
 """Simple test script to verify database connectivity."""
 
+import conftest  # Sets up sys.path
 import logging
 
-from src.utils.config import AppConfig
-from src.utils.db import DatabaseManager
+from utils.config import AppConfig
+from utils.db import DatabaseManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
