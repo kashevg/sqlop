@@ -152,3 +152,156 @@ class DatabaseManager:
                 """)
                 conn.commit()
                 logger.info("Dropped all tables")
+
+    # Schema management methods for dataset storage
+
+    def create_schema(self, schema_name: str) -> None:
+        """Create a new PostgreSQL schema for storing generated datasets.
+
+        Args:
+            schema_name: Name of the schema to create (e.g., 'slop_restaurant_v1')
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                # Sanitize schema name using SQL composition
+                cur.execute(
+                    psycopg.sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
+                        psycopg.sql.Identifier(schema_name)
+                    )
+                )
+                conn.commit()
+                logger.info(f"Created schema: {schema_name}")
+
+    def schema_exists(self, schema_name: str) -> bool:
+        """Check if a schema exists.
+
+        Args:
+            schema_name: Name of the schema to check
+
+        Returns:
+            True if schema exists, False otherwise
+        """
+        query = """
+            SELECT EXISTS (
+                SELECT FROM information_schema.schemata
+                WHERE schema_name = %s
+            )
+        """
+        result = self.execute_query(query, (schema_name,))
+        return result[0]['exists'] if result else False
+
+    def list_schemas(self, prefix: str = "slop_") -> List[dict]:
+        """List all schemas with a given prefix (SQLop datasets).
+
+        Args:
+            prefix: Schema name prefix to filter by (default: 'slop_')
+
+        Returns:
+            List of dicts with schema info: name, table_count, created_date
+        """
+        query = """
+            SELECT
+                s.schema_name,
+                COUNT(t.table_name) as table_count
+            FROM information_schema.schemata s
+            LEFT JOIN information_schema.tables t
+                ON s.schema_name = t.table_schema
+            WHERE s.schema_name LIKE %s
+            GROUP BY s.schema_name
+            ORDER BY s.schema_name DESC
+        """
+        return self.execute_query(query, (f"{prefix}%",))
+
+    def drop_schema(self, schema_name: str) -> None:
+        """Drop a schema and all its contents.
+
+        Args:
+            schema_name: Name of the schema to drop
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    psycopg.sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                        psycopg.sql.Identifier(schema_name)
+                    )
+                )
+                conn.commit()
+                logger.info(f"Dropped schema: {schema_name}")
+
+    def get_schema_tables(self, schema_name: str) -> List[str]:
+        """Get list of table names in a schema.
+
+        Args:
+            schema_name: Name of the schema
+
+        Returns:
+            List of table names
+        """
+        query = """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = %s
+            ORDER BY table_name
+        """
+        results = self.execute_query(query, (schema_name,))
+        return [r['table_name'] for r in results]
+
+    def execute_ddl_in_schema(self, ddl: str, schema_name: str) -> None:
+        """Execute DDL statements in a specific schema.
+
+        Args:
+            ddl: DDL statements to execute
+            schema_name: Schema to create tables in
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                # Set search_path to target schema
+                cur.execute(
+                    psycopg.sql.SQL("SET search_path TO {}").format(
+                        psycopg.sql.Identifier(schema_name)
+                    )
+                )
+
+                # Split by semicolon and execute each statement
+                statements = [s.strip() for s in ddl.split(';') if s.strip()]
+                for statement in statements:
+                    cur.execute(statement)
+
+                conn.commit()
+                logger.info(f"Executed {len(statements)} DDL statement(s) in schema {schema_name}")
+
+    def execute_insert_in_schema(self, table: str, data: List[dict], schema_name: str) -> int:
+        """Bulk insert data into a table in a specific schema.
+
+        Args:
+            table: Table name
+            data: List of dicts with row data
+            schema_name: Schema containing the table
+
+        Returns:
+            Number of rows inserted
+        """
+        if not data:
+            return 0
+
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                # Get column names from first record
+                columns = list(data[0].keys())
+                placeholders = ', '.join(['%s'] * len(columns))
+                column_names = ', '.join(columns)
+
+                # Use schema-qualified table name
+                qualified_table = f"{schema_name}.{table}"
+                insert_query = f"INSERT INTO {qualified_table} ({column_names}) VALUES ({placeholders})"
+
+                # Prepare data tuples
+                values = [tuple(row[col] for col in columns) for row in data]
+
+                # Execute batch insert
+                cur.executemany(insert_query, values)
+                conn.commit()
+
+                row_count = cur.rowcount
+                logger.info(f"Inserted {row_count} row(s) into {qualified_table}")
+                return row_count

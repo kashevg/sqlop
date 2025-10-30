@@ -19,6 +19,8 @@ Current Status: Phase 1 MVP complete, awaiting GCP setup for testing.
 See .claude/PLAN.md for detailed task breakdown and .claude/STATUS.md for current task.
 """
 
+import logging
+import traceback
 import streamlit as st
 import pandas as pd
 
@@ -27,6 +29,13 @@ from utils.db import DatabaseManager
 from utils.gemini_client import GeminiClient
 from tools.ddl_parser import DDLParser
 from tools.data_generator import DataGenerator
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 @st.cache_resource
@@ -315,8 +324,8 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
                         st.rerun()
 
             except Exception as e:
+                logger.error(f"Data generation failed: {str(e)}", exc_info=True)
                 st.error(f"❌ Kitchen mishap: {str(e)}")
-                import traceback
                 with st.expander("🔍 Error details"):
                     st.code(traceback.format_exc())
 
@@ -383,6 +392,7 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
                         st.rerun()
 
                 except Exception as e:
+                    logger.error(f"Table remix failed for {selected_table}: {str(e)}", exc_info=True)
                     st.error(f"❌ Remix failed: {str(e)}")
 
             # Download section
@@ -397,22 +407,68 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
                     use_container_width=True
                 )
 
-            # Optional: Store in database
+        # Save Dataset section (for all tables)
+        st.markdown("---")
+        st.markdown("### 💾 Save Dataset to Database")
+
+        col1, col2 = st.columns([3, 2])
+        with col1:
+            dataset_name = st.text_input(
+                "Dataset name",
+                value="",
+                placeholder="e.g., restaurant_test_v1",
+                help="Dataset will be stored in schema: slop_{name}",
+                key="dataset_name_input"
+            )
+        with col2:
             st.markdown("<br>", unsafe_allow_html=True)
-            col1, col2, col3 = st.columns([2, 1, 2])
-            with col2:
-                if st.button("🗄️ Store in DB", use_container_width=True):
-                    try:
-                        with st.spinner(f"Storing {selected_table} in database..."):
-                            # First ensure table exists
-                            if selected_table in st.session_state.parsed_tables:
-                                table_def = st.session_state.parsed_tables[selected_table]
-                                # Execute CREATE TABLE from DDL if needed
-                                # Then insert data
-                                db_manager.execute_insert(selected_table, df.to_dict('records'))
-                                st.success(f"✅ {len(df)} rows stored in {selected_table}!")
-                    except Exception as e:
-                        st.error(f"❌ Storage failed: {str(e)}")
+            save_btn = st.button("💾 Save All Tables", type="primary", use_container_width=True, disabled=not dataset_name)
+
+        if save_btn and dataset_name:
+            try:
+                # Generate schema name
+                schema_name = f"slop_{dataset_name}"
+
+                with st.spinner(f"Saving dataset to schema '{schema_name}'..."):
+                    # Create schema
+                    db_manager.create_schema(schema_name)
+
+                    # Get generation order
+                    parser = DDLParser()
+                    parser.tables = st.session_state.parsed_tables
+                    generation_order = parser.get_generation_order()
+
+                    # Create tables in schema
+                    if st.session_state.ddl_content:
+                        db_manager.execute_ddl_in_schema(st.session_state.ddl_content, schema_name)
+
+                    # Insert data for all tables
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+
+                    total_rows = 0
+                    for idx, table_name in enumerate(generation_order):
+                        status_text.text(f"Saving {table_name}... ({idx+1}/{len(generation_order)})")
+                        df = st.session_state.generated_data[table_name]
+                        rows = db_manager.execute_insert_in_schema(
+                            table_name,
+                            df.to_dict('records'),
+                            schema_name
+                        )
+                        total_rows += rows
+                        progress_bar.progress((idx + 1) / len(generation_order))
+
+                    status_text.empty()
+                    progress_bar.empty()
+
+                    st.success(f"✅ Dataset saved! Schema: `{schema_name}` • {len(generation_order)} tables • {total_rows} rows")
+                    st.info(f"💬 Use this dataset in the 'Chat with Slop' tab by selecting `{schema_name}` from the dropdown")
+
+            except Exception as e:
+                logger.error(f"Dataset save failed for schema {schema_name}: {str(e)}", exc_info=True)
+                st.error(f"❌ Save failed: {str(e)}")
+                with st.expander("🔍 Error details"):
+                    st.code(traceback.format_exc())
 
     else:
         # No data generated yet - show placeholder
@@ -426,6 +482,42 @@ def show_chat_tab(config: AppConfig, db_manager: DatabaseManager):
     st.markdown("_Ask me anything about your data - I speak both English and SQL!_")
 
     st.markdown("<br>", unsafe_allow_html=True)
+
+    # Dataset selector
+    try:
+        schemas = db_manager.list_schemas(prefix="slop_")
+        if schemas:
+            schema_names = [s['schema_name'] for s in schemas]
+
+            # Initialize session state for selected schema
+            if "selected_schema" not in st.session_state:
+                st.session_state.selected_schema = schema_names[0] if schema_names else None
+
+            col1, col2 = st.columns([3, 2])
+            with col1:
+                selected_schema = st.selectbox(
+                    "🗄️ Dataset",
+                    schema_names,
+                    index=schema_names.index(st.session_state.selected_schema) if st.session_state.selected_schema in schema_names else 0,
+                    help="Select a saved dataset to query"
+                )
+                st.session_state.selected_schema = selected_schema
+
+            with col2:
+                if selected_schema:
+                    # Show dataset info
+                    schema_info = next((s for s in schemas if s['schema_name'] == selected_schema), None)
+                    if schema_info:
+                        st.caption(f"📊 {schema_info['table_count']} tables")
+
+            st.markdown("---")
+        else:
+            st.warning("⚠️ No saved datasets found. Generate and save data in the 'Slop Generator' tab first!")
+            st.markdown("---")
+    except Exception as e:
+        logger.error(f"Failed to load dataset list: {str(e)}", exc_info=True)
+        st.error(f"❌ Failed to load datasets: {str(e)}")
+        st.markdown("---")
 
     # Chat history placeholder
     st.markdown("### 💭 Conversation")
