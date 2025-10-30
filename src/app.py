@@ -22,7 +22,6 @@ See .claude/PLAN.md for detailed task breakdown and .claude/STATUS.md for curren
 import logging
 import traceback
 import streamlit as st
-import pandas as pd
 
 from utils.config import AppConfig
 from utils.db import DatabaseManager
@@ -32,8 +31,7 @@ from tools.data_generator import DataGenerator
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -62,7 +60,7 @@ def check_database_connection(db_manager: DatabaseManager) -> tuple[bool, str]:
     """Check if database is connected and return status."""
     try:
         result = db_manager.execute_query("SELECT version()")
-        version = result[0]['version'].split(',')[0]
+        version = result[0]["version"].split(",")[0]
         return True, version
     except Exception as e:
         return False, str(e)
@@ -74,11 +72,12 @@ def main():
         page_title="SQLop - SQL Slop Generator",
         page_icon="🍜",
         layout="wide",
-        initial_sidebar_state="expanded"
+        initial_sidebar_state="expanded",
     )
 
     # Custom CSS for better styling
-    st.markdown("""
+    st.markdown(
+        """
         <style>
         .main {
             background: linear-gradient(to bottom right, #fafafa 0%, #f0f0f5 100%);
@@ -145,7 +144,9 @@ def main():
             display: none;
         }
         </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     # Initialize config and database
     try:
@@ -165,7 +166,7 @@ def main():
         page = st.radio(
             "Navigate",
             ["🍲 Slop Generator", "💬 Chat with Slop"],
-            label_visibility="collapsed"
+            label_visibility="collapsed",
         )
 
         st.markdown("---")
@@ -202,7 +203,9 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
 
     # Hero section with slop theme
     st.markdown("# 🍲 SQL Slop Generator")
-    st.markdown("_Order up! Tell me what kind of data slop you're craving, and I'll cook it up fresh_")
+    st.markdown(
+        "_Order up! Tell me what kind of data slop you're craving, and I'll cook it up fresh_"
+    )
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -211,7 +214,7 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
         "🍴 Place your order",
         placeholder="E.g., 'Cook me up 1000 customer records with names, emails, and order history... make it spicy with some edge cases!'",
         height=120,
-        help="Describe the data slop you want. Be specific about portions (row counts), ingredients (columns), and seasoning (constraints)."
+        help="Describe the data slop you want. Be specific about portions (row counts), ingredients (columns), and seasoning (constraints).",
     )
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -225,7 +228,7 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
             "Upload DDL Schema",
             type=["sql", "json", "ddl", "txt"],
             label_visibility="collapsed",
-            help="Upload your database schema in SQL or JSON format"
+            help="Upload your database schema in SQL or JSON format",
         )
         st.caption("Supported: SQL, JSON")
 
@@ -234,7 +237,10 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
             st.markdown("### 📝 Schema Preview")
             schema_content = uploaded_file.read().decode()
             st.session_state.ddl_content = schema_content
-            st.code(schema_content[:500] + ("..." if len(schema_content) > 500 else ""), language="sql")
+            st.code(
+                schema_content[:500] + ("..." if len(schema_content) > 500 else ""),
+                language="sql",
+            )
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -243,23 +249,23 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            temperature = st.slider(
+            _temperature = st.slider(
                 "🌡️ Temperature",
                 min_value=0.0,
                 max_value=2.0,
                 value=float(config.gemini.temperature),
                 step=0.1,
-                help="Higher values = more creative, lower = more deterministic"
+                help="Higher values = more creative, lower = more deterministic",
             )
 
         with col2:
-            max_tokens = st.number_input(
+            _max_tokens = st.number_input(
                 "🎯 Max Tokens",
                 min_value=100,
                 max_value=100000,
                 value=8000,
                 step=1000,
-                help="Maximum tokens for generation"
+                help="Maximum tokens for generation",
             )
 
         with col3:
@@ -269,7 +275,7 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
                 max_value=10000,
                 value=1000,
                 step=100,
-                help="Number of rows to generate per table"
+                help="Number of rows to generate per table",
             )
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -277,7 +283,9 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
     # Generate button with nice styling
     col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
-        generate_btn = st.button("👨‍🍳 Cook It Up!", type="primary", use_container_width=True)
+        generate_btn = st.button(
+            "👨‍🍳 Cook It Up!", type="primary", use_container_width=True
+        )
 
     if generate_btn:
         if not st.session_state.ddl_content:
@@ -291,9 +299,13 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
                     st.session_state.parsed_tables = tables
 
                     if not tables:
-                        st.error("❌ No tables found in DDL. Please check your schema format.")
+                        st.error(
+                            "❌ No tables found in DDL. Please check your schema format."
+                        )
                     else:
-                        st.success(f"✅ Parsed {len(tables)} tables: {', '.join(tables.keys())}")
+                        st.success(
+                            f"✅ Parsed {len(tables)} tables: {', '.join(tables.keys())}"
+                        )
 
                         # Generate data
                         gemini_client = get_gemini_client(config)
@@ -307,20 +319,24 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
                         total_tables = len(generation_order)
 
                         for idx, table_name in enumerate(generation_order):
-                            status_text.text(f"🍳 Cooking {table_name}... ({idx+1}/{total_tables})")
+                            status_text.text(
+                                f"🍳 Cooking {table_name}... ({idx+1}/{total_tables})"
+                            )
                             table = tables[table_name]
                             df = generator._generate_table_data(
                                 table,
                                 int(rows_per_table),
                                 prompt if prompt else "",
-                                tables
+                                tables,
                             )
                             st.session_state.generated_data[table_name] = df
                             progress_bar.progress((idx + 1) / total_tables)
 
                         status_text.empty()
                         progress_bar.empty()
-                        st.success(f"🍽️ Fresh slop ready! Generated {total_tables} tables with {int(rows_per_table)} rows each.")
+                        st.success(
+                            f"🍽️ Fresh slop ready! Generated {total_tables} tables with {int(rows_per_table)} rows each."
+                        )
                         st.rerun()
 
             except Exception as e:
@@ -343,9 +359,7 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
             st.markdown(f"*{len(available_tables)} tables ready to serve*")
         with col3:
             selected_table = st.selectbox(
-                "Table",
-                available_tables,
-                label_visibility="collapsed"
+                "Table", available_tables, label_visibility="collapsed"
             )
 
         # Display selected table
@@ -354,7 +368,7 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
             st.dataframe(
                 df.head(100),  # Show first 100 rows
                 use_container_width=True,
-                hide_index=True
+                hide_index=True,
             )
 
             st.caption(f"Showing first 100 of {len(df)} rows")
@@ -368,31 +382,38 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
                     "Edit",
                     placeholder=f"Refine {selected_table}? E.g., 'More diverse names', 'Higher price range'...",
                     label_visibility="collapsed",
-                    key=f"edit_{selected_table}"
+                    key=f"edit_{selected_table}",
                 )
             with col2:
-                submit_edit = st.button("🔧 Remix", type="secondary", use_container_width=True)
+                submit_edit = st.button(
+                    "🔧 Remix", type="secondary", use_container_width=True
+                )
 
             if submit_edit and edit_instructions:
                 try:
                     with st.spinner(f"🍳 Remixing {selected_table}..."):
                         gemini_client = get_gemini_client(config)
                         generator = DataGenerator(gemini_client)
-                        generator.generated_data = st.session_state.generated_data.copy()
+                        generator.generated_data = (
+                            st.session_state.generated_data.copy()
+                        )
 
                         # Regenerate just this table
                         df = generator.regenerate_table(
                             selected_table,
                             st.session_state.parsed_tables,
                             int(rows_per_table),
-                            edit_instructions
+                            edit_instructions,
                         )
                         st.session_state.generated_data[selected_table] = df
                         st.success(f"✅ {selected_table} remixed!")
                         st.rerun()
 
                 except Exception as e:
-                    logger.error(f"Table remix failed for {selected_table}: {str(e)}", exc_info=True)
+                    logger.error(
+                        f"Table remix failed for {selected_table}: {str(e)}",
+                        exc_info=True,
+                    )
                     st.error(f"❌ Remix failed: {str(e)}")
 
             # Download section
@@ -404,7 +425,7 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
                     data=df.to_csv(index=False),
                     file_name=f"{selected_table}.csv",
                     mime="text/csv",
-                    use_container_width=True
+                    use_container_width=True,
                 )
 
         # Save Dataset section (for all tables)
@@ -418,11 +439,16 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
                 value="",
                 placeholder="e.g., restaurant_test_v1",
                 help="Dataset will be stored in schema: slop_{name}",
-                key="dataset_name_input"
+                key="dataset_name_input",
             )
         with col2:
             st.markdown("<br>", unsafe_allow_html=True)
-            save_btn = st.button("💾 Save All Tables", type="primary", use_container_width=True, disabled=not dataset_name)
+            save_btn = st.button(
+                "💾 Save All Tables",
+                type="primary",
+                use_container_width=True,
+                disabled=not dataset_name,
+            )
 
         if save_btn and dataset_name:
             try:
@@ -440,7 +466,9 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
 
                     # Create tables in schema
                     if st.session_state.ddl_content:
-                        db_manager.execute_ddl_in_schema(st.session_state.ddl_content, schema_name)
+                        db_manager.execute_ddl_in_schema(
+                            st.session_state.ddl_content, schema_name
+                        )
 
                     # Insert data for all tables
                     progress_bar = st.progress(0)
@@ -448,12 +476,12 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
 
                     total_rows = 0
                     for idx, table_name in enumerate(generation_order):
-                        status_text.text(f"Saving {table_name}... ({idx+1}/{len(generation_order)})")
+                        status_text.text(
+                            f"Saving {table_name}... ({idx+1}/{len(generation_order)})"
+                        )
                         df = st.session_state.generated_data[table_name]
                         rows = db_manager.execute_insert_in_schema(
-                            table_name,
-                            df.to_dict('records'),
-                            schema_name
+                            table_name, df.to_dict("records"), schema_name
                         )
                         total_rows += rows
                         progress_bar.progress((idx + 1) / len(generation_order))
@@ -461,18 +489,27 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
                     status_text.empty()
                     progress_bar.empty()
 
-                    st.success(f"✅ Dataset saved! Schema: `{schema_name}` • {len(generation_order)} tables • {total_rows} rows")
-                    st.info(f"💬 Use this dataset in the 'Chat with Slop' tab by selecting `{schema_name}` from the dropdown")
+                    st.success(
+                        f"✅ Dataset saved! Schema: `{schema_name}` • {len(generation_order)} tables • {total_rows} rows"
+                    )
+                    st.info(
+                        f"💬 Use this dataset in the 'Chat with Slop' tab by selecting `{schema_name}` from the dropdown"
+                    )
 
             except Exception as e:
-                logger.error(f"Dataset save failed for schema {schema_name}: {str(e)}", exc_info=True)
+                logger.error(
+                    f"Dataset save failed for schema {schema_name}: {str(e)}",
+                    exc_info=True,
+                )
                 st.error(f"❌ Save failed: {str(e)}")
                 with st.expander("🔍 Error details"):
                     st.code(traceback.format_exc())
 
     else:
         # No data generated yet - show placeholder
-        st.info("🍽️ No fresh slop yet! Upload a schema and hit 'Cook It Up!' to get started.")
+        st.info(
+            "🍽️ No fresh slop yet! Upload a schema and hit 'Cook It Up!' to get started."
+        )
 
 
 def show_chat_tab(config: AppConfig, db_manager: DatabaseManager):
@@ -487,32 +524,43 @@ def show_chat_tab(config: AppConfig, db_manager: DatabaseManager):
     try:
         schemas = db_manager.list_schemas(prefix="slop_")
         if schemas:
-            schema_names = [s['schema_name'] for s in schemas]
+            schema_names = [s["schema_name"] for s in schemas]
 
             # Initialize session state for selected schema
             if "selected_schema" not in st.session_state:
-                st.session_state.selected_schema = schema_names[0] if schema_names else None
+                st.session_state.selected_schema = (
+                    schema_names[0] if schema_names else None
+                )
 
             col1, col2 = st.columns([3, 2])
             with col1:
                 selected_schema = st.selectbox(
                     "🗄️ Dataset",
                     schema_names,
-                    index=schema_names.index(st.session_state.selected_schema) if st.session_state.selected_schema in schema_names else 0,
-                    help="Select a saved dataset to query"
+                    index=(
+                        schema_names.index(st.session_state.selected_schema)
+                        if st.session_state.selected_schema in schema_names
+                        else 0
+                    ),
+                    help="Select a saved dataset to query",
                 )
                 st.session_state.selected_schema = selected_schema
 
             with col2:
                 if selected_schema:
                     # Show dataset info
-                    schema_info = next((s for s in schemas if s['schema_name'] == selected_schema), None)
+                    schema_info = next(
+                        (s for s in schemas if s["schema_name"] == selected_schema),
+                        None,
+                    )
                     if schema_info:
                         st.caption(f"📊 {schema_info['table_count']} tables")
 
             st.markdown("---")
         else:
-            st.warning("⚠️ No saved datasets found. Generate and save data in the 'Slop Generator' tab first!")
+            st.warning(
+                "⚠️ No saved datasets found. Generate and save data in the 'Slop Generator' tab first!"
+            )
             st.markdown("---")
     except Exception as e:
         logger.error(f"Failed to load dataset list: {str(e)}", exc_info=True)
@@ -528,12 +576,14 @@ def show_chat_tab(config: AppConfig, db_manager: DatabaseManager):
 
         # Example questions
         with st.expander("💡 Try asking me...", expanded=True):
-            st.markdown("""
+            st.markdown(
+                """
             - "Show me the juiciest customers by revenue"
             - "What's the average order value - give it to me straight"
             - "Plot the sales rollercoaster for 2024"
             - "Which products are the biggest flops?"
-            """)
+            """
+            )
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -543,7 +593,7 @@ def show_chat_tab(config: AppConfig, db_manager: DatabaseManager):
         user_question = st.text_input(
             "Ask a question",
             placeholder="What's cooking? e.g., 'Show me the freshest sales data by region'",
-            label_visibility="collapsed"
+            label_visibility="collapsed",
         )
     with col2:
         send_btn = st.button("🍴 Serve", type="primary", use_container_width=True)

@@ -69,7 +69,9 @@ class AppConfig:
                 "Either GCP_PROJECT_ID or GOOGLE_API_KEY must be set in environment"
             )
 
-        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
+        data_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data"
+        )
         os.makedirs(data_dir, exist_ok=True)
 
         return cls(database=database, gemini=gemini, data_dir=data_dir)

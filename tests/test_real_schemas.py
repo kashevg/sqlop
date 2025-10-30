@@ -1,6 +1,5 @@
 """Test DDL parser with real course material schemas."""
 
-import conftest  # Sets up sys.path
 from tools.ddl_parser import DDLParser
 
 
@@ -8,24 +7,28 @@ def test_schema(schema_name: str, file_path: str):
     """Test parsing a schema file."""
     print(f"\n{'='*70}")
     print(f"Testing: {schema_name}")
-    print('='*70)
+    print("=" * 70)
 
-    with open(file_path, 'r') as f:
+    with open(file_path, "r") as f:
         ddl_content = f.read()
 
     parser = DDLParser()
     try:
         tables = parser.parse(ddl_content)
 
-        print(f"\n✅ Parsed successfully!")
+        print("\n✅ Parsed successfully!")
         print(f"Found {len(tables)} tables: {', '.join(tables.keys())}")
 
         # Show generation order
         order = parser.get_generation_order()
-        print(f"\nGeneration order (respecting FK dependencies):")
+        print("\nGeneration order (respecting FK dependencies):")
         for i, table_name in enumerate(order, 1):
             table = tables[table_name]
-            fk_info = f" (depends on: {', '.join([fk.referenced_table for fk in table.foreign_keys])})" if table.foreign_keys else ""
+            fk_info = (
+                f" (depends on: {', '.join([fk.referenced_table for fk in table.foreign_keys])})"
+                if table.foreign_keys
+                else ""
+            )
             print(f"  {i}. {table_name}{fk_info}")
 
         # Show detailed info for first table
@@ -51,6 +54,7 @@ def test_schema(schema_name: str, file_path: str):
     except Exception as e:
         print(f"\n❌ Failed to parse: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -63,16 +67,16 @@ if __name__ == "__main__":
     ]
 
     print("🧪 Testing DDL Parser with Real Course Material Schemas")
-    print("="*70)
+    print("=" * 70)
 
     results = []
     for name, path in schemas:
         success = test_schema(name, path)
         results.append((name, success))
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("SUMMARY")
-    print("="*70)
+    print("=" * 70)
     for name, success in results:
         status = "✅ PASS" if success else "❌ FAIL"
         print(f"{status} - {name}")

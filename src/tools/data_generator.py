@@ -31,7 +31,10 @@ class DataGenerator:
         rows_per_table: int = 100,
         instructions: str = "",
         stream: bool = False,
-    ) -> Dict[str, pd.DataFrame] | Generator[tuple[str, str], None, Dict[str, pd.DataFrame]]:
+    ) -> (
+        Dict[str, pd.DataFrame]
+        | Generator[tuple[str, str], None, Dict[str, pd.DataFrame]]
+    ):
         """Generate data for all tables in correct dependency order.
 
         Args:
@@ -265,7 +268,10 @@ class DataGenerator:
                 "Use column names as keys. Example:",
                 json.dumps(
                     [
-                        {col.name: f"<{col.data_type.lower()} value>" for col in table.columns[:3]}
+                        {
+                            col.name: f"<{col.data_type.lower()} value>"
+                            for col in table.columns[:3]
+                        }
                     ],
                     indent=2,
                 ),

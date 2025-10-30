@@ -1,6 +1,5 @@
 """Test script for Gemini client functionality."""
 
-import conftest  # Sets up sys.path
 from utils.config import AppConfig
 from utils.gemini_client import GeminiClient
 
@@ -68,6 +67,7 @@ def test_json_streaming():
 
     # Parse the complete JSON
     import json
+
     full_json = "".join(chunks)
     parsed = json.loads(full_json)
     print(f"\n✓ Parsed: {parsed}\n")
@@ -92,4 +92,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
         import traceback
+
         traceback.print_exc()

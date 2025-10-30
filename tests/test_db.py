@@ -1,13 +1,14 @@
 """Simple test script to verify database connectivity."""
 
-import conftest  # Sets up sys.path
 import logging
 
 from utils.config import AppConfig
 from utils.db import DatabaseManager
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -18,8 +19,10 @@ def main():
     # Load configuration
     try:
         config = AppConfig.from_env()
-        logger.info(f"Configuration loaded successfully")
-        logger.info(f"Database: {config.database.host}:{config.database.port}/{config.database.name}")
+        logger.info("Configuration loaded successfully")
+        logger.info(
+            f"Database: {config.database.host}:{config.database.port}/{config.database.name}"
+        )
         logger.info(f"Gemini model: {config.gemini.model}")
     except Exception as e:
         logger.error(f"Failed to load configuration: {e}")
@@ -41,11 +44,13 @@ def main():
 
         # Test schema query
         logger.info("Testing schema query...")
-        tables = db_manager.execute_query("""
+        tables = db_manager.execute_query(
+            """
             SELECT table_name
             FROM information_schema.tables
             WHERE table_schema = 'public'
-        """)
+        """
+        )
         logger.info(f"✓ Found {len(tables)} tables in public schema")
 
         logger.info("\n=== All tests passed! ===")

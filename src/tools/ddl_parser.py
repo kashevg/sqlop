@@ -9,8 +9,8 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 import sqlparse
-from sqlparse.sql import Identifier, IdentifierList, Parenthesis, Token
-from sqlparse.tokens import Keyword, Name, Punctuation
+from sqlparse.sql import Identifier, Parenthesis
+from sqlparse.tokens import Name
 
 
 @dataclass
@@ -149,8 +149,8 @@ class DDLParser:
             List of definition strings
         """
         content = str(parenthesis)[1:-1]  # Remove outer parentheses
-        definitions = []
-        current = []
+        definitions: List[str] = []
+        current: List[str] = []
         paren_depth = 0
 
         for char in content:
@@ -310,7 +310,9 @@ class DDLParser:
             returns: ['users', 'orders', 'order_items']
         """
         # Build dependency graph
-        dependencies: Dict[str, List[str]] = {table_name: [] for table_name in self.tables}
+        dependencies: Dict[str, List[str]] = {
+            table_name: [] for table_name in self.tables
+        }
 
         for table_name, table in self.tables.items():
             for fk in table.foreign_keys:

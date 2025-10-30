@@ -1,6 +1,5 @@
 """Test DDL parser with sample schemas."""
 
-import conftest  # Sets up sys.path
 from tools.ddl_parser import DDLParser
 
 
@@ -114,7 +113,7 @@ def test_restaurant_schema():
             print(f"    - {col.name}: {col.data_type}{flags_str}")
 
         if table.foreign_keys:
-            print(f"  Foreign Keys:")
+            print("  Foreign Keys:")
             for fk in table.foreign_keys:
                 print(
                     f"    - {fk.column} -> {fk.referenced_table}.{fk.referenced_column}"
@@ -172,14 +171,14 @@ def test_constraints():
     tables = parser.parse(test_schema)
 
     table = tables["test_table"]
-    print(f"\ntest_table columns:")
+    print("\ntest_table columns:")
     for col in table.columns:
         print(
             f"  {col.name}: {col.data_type} (PK={col.primary_key}, NN={col.not_null}, "
             f"UQ={col.unique}, default={col.default})"
         )
 
-    print(f"\nForeign keys:")
+    print("\nForeign keys:")
     for fk in table.foreign_keys:
         print(f"  {fk.column} -> {fk.referenced_table}.{fk.referenced_column}")
 

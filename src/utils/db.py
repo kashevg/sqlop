@@ -62,7 +62,7 @@ class DatabaseManager:
         with self.get_connection() as conn:
             with conn.cursor() as cur:
                 # Split by semicolon and execute each statement
-                statements = [s.strip() for s in ddl.split(';') if s.strip()]
+                statements = [s.strip() for s in ddl.split(";") if s.strip()]
                 for statement in statements:
                     cur.execute(statement)
                 conn.commit()
@@ -86,10 +86,12 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 # Get column names from first record
                 columns = list(data[0].keys())
-                placeholders = ', '.join(['%s'] * len(columns))
-                column_names = ', '.join(columns)
+                placeholders = ", ".join(["%s"] * len(columns))
+                column_names = ", ".join(columns)
 
-                insert_query = f"INSERT INTO {table} ({column_names}) VALUES ({placeholders})"
+                insert_query = (
+                    f"INSERT INTO {table} ({column_names}) VALUES ({placeholders})"
+                )
 
                 # Prepare data tuples
                 values = [tuple(row[col] for col in columns) for row in data]
@@ -135,13 +137,14 @@ class DatabaseManager:
             )
         """
         result = self.execute_query(query, (table_name,))
-        return result[0]['exists'] if result else False
+        return result[0]["exists"] if result else False
 
     def drop_all_tables(self) -> None:
         """Drop all tables in the public schema (for cleanup)."""
         with self.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     DO $$ DECLARE
                         r RECORD;
                     BEGIN
@@ -149,7 +152,8 @@ class DatabaseManager:
                             EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
                         END LOOP;
                     END $$;
-                """)
+                """
+                )
                 conn.commit()
                 logger.info("Dropped all tables")
 
@@ -188,7 +192,7 @@ class DatabaseManager:
             )
         """
         result = self.execute_query(query, (schema_name,))
-        return result[0]['exists'] if result else False
+        return result[0]["exists"] if result else False
 
     def list_schemas(self, prefix: str = "slop_") -> List[dict]:
         """List all schemas with a given prefix (SQLop datasets).
@@ -244,7 +248,7 @@ class DatabaseManager:
             ORDER BY table_name
         """
         results = self.execute_query(query, (schema_name,))
-        return [r['table_name'] for r in results]
+        return [r["table_name"] for r in results]
 
     def execute_ddl_in_schema(self, ddl: str, schema_name: str) -> None:
         """Execute DDL statements in a specific schema.
@@ -263,14 +267,18 @@ class DatabaseManager:
                 )
 
                 # Split by semicolon and execute each statement
-                statements = [s.strip() for s in ddl.split(';') if s.strip()]
+                statements = [s.strip() for s in ddl.split(";") if s.strip()]
                 for statement in statements:
                     cur.execute(statement)
 
                 conn.commit()
-                logger.info(f"Executed {len(statements)} DDL statement(s) in schema {schema_name}")
+                logger.info(
+                    f"Executed {len(statements)} DDL statement(s) in schema {schema_name}"
+                )
 
-    def execute_insert_in_schema(self, table: str, data: List[dict], schema_name: str) -> int:
+    def execute_insert_in_schema(
+        self, table: str, data: List[dict], schema_name: str
+    ) -> int:
         """Bulk insert data into a table in a specific schema.
 
         Args:
@@ -288,8 +296,8 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 # Get column names from first record
                 columns = list(data[0].keys())
-                placeholders = ', '.join(['%s'] * len(columns))
-                column_names = ', '.join(columns)
+                placeholders = ", ".join(["%s"] * len(columns))
+                column_names = ", ".join(columns)
 
                 # Use schema-qualified table name
                 qualified_table = f"{schema_name}.{table}"

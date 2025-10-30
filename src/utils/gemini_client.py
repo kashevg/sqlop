@@ -23,11 +23,8 @@ class GeminiClient:
             config: GeminiConfig with model settings and authentication
         """
         self.config = config
-        self._client = None
-        self._initialize_client()
 
-    def _initialize_client(self) -> None:
-        """Initialize the Gemini client based on authentication method."""
+        # Initialize client based on authentication method
         if self.config.is_vertex_ai():
             # Vertex AI authentication
             self._client = genai.Client(
