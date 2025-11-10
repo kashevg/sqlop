@@ -273,7 +273,7 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
                 "📊 Rows per Table",
                 min_value=10,
                 max_value=10000,
-                value=1000,
+                value=10,
                 step=100,
                 help="Number of rows to generate per table",
             )
@@ -293,9 +293,18 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
         else:
             try:
                 with st.spinner("🍳 Cooking your data slop..."):
+                    # Convert MySQL syntax to PostgreSQL if needed (before parsing)
+                    from utils.ddl_converter import mysql_to_postgres, detect_mysql_syntax
+
+                    ddl_to_parse = st.session_state.ddl_content
+                    if detect_mysql_syntax(ddl_to_parse):
+                        logger.info("MySQL syntax detected, converting to PostgreSQL before parsing")
+                        ddl_to_parse = mysql_to_postgres(ddl_to_parse)
+                        st.session_state.ddl_content = ddl_to_parse  # Update stored DDL
+
                     # Parse DDL
                     parser = DDLParser()
-                    tables = parser.parse(st.session_state.ddl_content)
+                    tables = parser.parse(ddl_to_parse)
                     st.session_state.parsed_tables = tables
 
                     if not tables:
@@ -329,7 +338,10 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
                                 prompt if prompt else "",
                                 tables,
                             )
+                            # Update both session state and generator's internal state
+                            # Generator needs this to look up FK values for dependent tables
                             st.session_state.generated_data[table_name] = df
+                            generator.generated_data[table_name] = df
                             progress_bar.progress((idx + 1) / total_tables)
 
                         status_text.empty()
@@ -451,10 +463,10 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
             )
 
         if save_btn and dataset_name:
-            try:
-                # Generate schema name
-                schema_name = f"slop_{dataset_name}"
+            # Generate schema name
+            schema_name = f"slop_{dataset_name}"
 
+            try:
                 with st.spinner(f"Saving dataset to schema '{schema_name}'..."):
                     # Create schema
                     db_manager.create_schema(schema_name)
@@ -466,8 +478,17 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
 
                     # Create tables in schema
                     if st.session_state.ddl_content:
+                        # Convert MySQL syntax to PostgreSQL if needed
+                        from utils.ddl_converter import mysql_to_postgres, detect_mysql_syntax
+
+                        ddl_to_execute = st.session_state.ddl_content
+                        if detect_mysql_syntax(ddl_to_execute):
+                            st.info("🔧 MySQL syntax detected - auto-converting to PostgreSQL...")
+                            logger.info("MySQL syntax detected, converting to PostgreSQL")
+                            ddl_to_execute = mysql_to_postgres(ddl_to_execute)
+
                         db_manager.execute_ddl_in_schema(
-                            st.session_state.ddl_content, schema_name
+                            ddl_to_execute, schema_name
                         )
 
                     # Insert data for all tables

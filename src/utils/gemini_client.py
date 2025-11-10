@@ -94,19 +94,35 @@ class GeminiClient:
     def generate_json(
         self,
         prompt: str,
+        response_schema: Dict[str, Any],
         temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Generate structured JSON response from a prompt.
 
         Args:
-            prompt: The prompt to send to Gemini (should request JSON format)
+            prompt: The prompt to send to Gemini
+            response_schema: JSON schema to enforce structure (OpenAPI 3.0 format).
+                            This guarantees valid JSON output without markdown fences.
             temperature: Override default temperature (0.0-2.0)
 
         Returns:
-            Parsed JSON response as a dictionary
+            Parsed JSON response as a dictionary or list (matching the schema)
 
         Raises:
-            json.JSONDecodeError: If response is not valid JSON
+            ValueError: If response cannot be parsed as JSON
+
+        Example:
+            >>> schema = {
+            ...     "type": "ARRAY",
+            ...     "items": {
+            ...         "type": "OBJECT",
+            ...         "properties": {
+            ...             "name": {"type": "STRING"},
+            ...             "age": {"type": "INTEGER"}
+            ...         }
+            ...     }
+            ... }
+            >>> result = client.generate_json("Generate 3 users", schema)
         """
         temp = temperature if temperature is not None else self.config.temperature
 
@@ -114,6 +130,7 @@ class GeminiClient:
             temperature=temp,
             max_output_tokens=8192,
             response_mime_type="application/json",
+            response_schema=response_schema,
         )
 
         response = self._client.models.generate_content(
@@ -122,7 +139,16 @@ class GeminiClient:
             config=generation_config,
         )
 
-        return json.loads(response.text)
+        # With response_schema, Gemini guarantees valid JSON (no markdown fences)
+        try:
+            return json.loads(response.text)
+        except json.JSONDecodeError as e:
+            # This should rarely happen with schema enforcement
+            print(f"Unexpected: Failed to parse JSON with schema. Raw response:")
+            print(response.text[:500])
+            raise ValueError(
+                f"Failed to parse JSON from Gemini response despite schema. Error: {e}"
+            ) from e
 
     def generate_json_stream(
         self,

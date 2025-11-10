@@ -87,10 +87,11 @@ class DatabaseManager:
                 # Get column names from first record
                 columns = list(data[0].keys())
                 placeholders = ", ".join(["%s"] * len(columns))
-                column_names = ", ".join(columns)
+                # Quote column names to handle reserved keywords and special characters
+                column_names = ", ".join([f'"{col}"' for col in columns])
 
                 insert_query = (
-                    f"INSERT INTO {table} ({column_names}) VALUES ({placeholders})"
+                    f'INSERT INTO "{table}" ({column_names}) VALUES ({placeholders})'
                 )
 
                 # Prepare data tuples
@@ -259,22 +260,31 @@ class DatabaseManager:
         """
         with self.get_connection() as conn:
             with conn.cursor() as cur:
-                # Set search_path to target schema
+                # Set search_path to target schema (include public for system references)
+                # Store original search_path to restore later
+                cur.execute("SHOW search_path")
+                original_search_path = cur.fetchone()[0]
+
                 cur.execute(
-                    psycopg.sql.SQL("SET search_path TO {}").format(
+                    psycopg.sql.SQL("SET search_path TO {}, public").format(
                         psycopg.sql.Identifier(schema_name)
                     )
                 )
 
-                # Split by semicolon and execute each statement
-                statements = [s.strip() for s in ddl.split(";") if s.strip()]
-                for statement in statements:
-                    cur.execute(statement)
+                try:
+                    # Split by semicolon and execute each statement
+                    statements = [s.strip() for s in ddl.split(";") if s.strip()]
+                    for statement in statements:
+                        cur.execute(statement)
 
-                conn.commit()
-                logger.info(
-                    f"Executed {len(statements)} DDL statement(s) in schema {schema_name}"
-                )
+                    conn.commit()
+                    logger.info(
+                        f"Executed {len(statements)} DDL statement(s) in schema {schema_name}"
+                    )
+                finally:
+                    # Restore original search_path to avoid pool contamination
+                    cur.execute(f"SET search_path TO {original_search_path}")
+                    conn.commit()
 
     def execute_insert_in_schema(
         self, table: str, data: List[dict], schema_name: str
@@ -297,13 +307,19 @@ class DatabaseManager:
                 # Get column names from first record
                 columns = list(data[0].keys())
                 placeholders = ", ".join(["%s"] * len(columns))
-                column_names = ", ".join(columns)
 
-                # Use schema-qualified table name
-                qualified_table = f"{schema_name}.{table}"
+                # PostgreSQL lowercases unquoted identifiers during CREATE TABLE
+                # So we need to lowercase both table and column names when using quoted identifiers
+                # to ensure they match the actual names in the database
+                table_lower = table.lower()
+                columns_lower = [col.lower() for col in columns]
+                column_names = ", ".join([f'"{col}"' for col in columns_lower])
+
+                # Use schema-qualified table name with quoted identifiers
+                qualified_table = f'"{schema_name}"."{table_lower}"'
                 insert_query = f"INSERT INTO {qualified_table} ({column_names}) VALUES ({placeholders})"
 
-                # Prepare data tuples
+                # Prepare data tuples (use original column names from data dict)
                 values = [tuple(row[col] for col in columns) for row in data]
 
                 # Execute batch insert

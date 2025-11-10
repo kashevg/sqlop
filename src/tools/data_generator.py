@@ -151,6 +151,8 @@ class DataGenerator:
     ) -> pd.DataFrame:
         """Generate data for a single table.
 
+        Uses batching to avoid hitting token limits for large datasets.
+
         Args:
             table: Table object to generate data for
             rows: Number of rows to generate
@@ -160,16 +162,150 @@ class DataGenerator:
         Returns:
             DataFrame with generated data
         """
+        # Batch size to avoid hitting max_output_tokens (8192)
+        # Conservative estimate: ~200-300 tokens per row for complex schemas
+        # Safe batch size: 20 rows (~4000-6000 tokens with overhead, leaving buffer)
+        BATCH_SIZE = 20
+
+        if rows <= BATCH_SIZE:
+            # Single batch - generate all at once
+            return self._generate_batch(table, rows, instructions, all_tables)
+        else:
+            # Multiple batches - split and concatenate
+            print(
+                f"Batching {rows} rows into chunks of {BATCH_SIZE} for {table.name}..."
+            )
+            batches = []
+            remaining = rows
+
+            while remaining > 0:
+                batch_size = min(remaining, BATCH_SIZE)
+                print(f"  Generating batch of {batch_size} rows...")
+
+                batch_df = self._generate_batch(
+                    table, batch_size, instructions, all_tables
+                )
+                batches.append(batch_df)
+
+                remaining -= batch_size
+
+            # Concatenate all batches
+            df = pd.concat(batches, ignore_index=True)
+
+            # Renumber primary keys if present to be sequential
+            for col in table.columns:
+                if col.primary_key and col.name in df.columns:
+                    df[col.name] = range(1, len(df) + 1)
+
+            print(f"  Completed: {len(df)} total rows for {table.name}")
+            return df
+
+    def _generate_batch(
+        self,
+        table: Table,
+        rows: int,
+        instructions: str,
+        all_tables: Dict[str, Table],
+    ) -> pd.DataFrame:
+        """Generate a single batch of data.
+
+        Args:
+            table: Table object to generate data for
+            rows: Number of rows to generate in this batch
+            instructions: User instructions
+            all_tables: All tables in schema (for FK references)
+
+        Returns:
+            DataFrame with generated data
+        """
         # Build prompt for LLM
         prompt = self._build_generation_prompt(table, rows, instructions, all_tables)
 
-        # Generate data using Gemini
-        response = self.gemini.generate_json(prompt, temperature=0.9)
+        # Build JSON schema for structured output
+        schema = self._build_json_schema(table)
+
+        # Generate data using Gemini with schema enforcement
+        response = self.gemini.generate_json(prompt, schema, temperature=0.9)
 
         # Parse response into DataFrame
         df = self._parse_generation_response(response, table)
 
         return df
+
+    def _build_json_schema(self, table: Table) -> Dict[str, Any]:
+        """Build JSON schema for table data generation.
+
+        Args:
+            table: Table object with column definitions
+
+        Returns:
+            OpenAPI 3.0 schema dict for array of row objects
+
+        Example output:
+            {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "id": {"type": "INTEGER"},
+                        "name": {"type": "STRING"}
+                    },
+                    "required": ["id", "name"]
+                }
+            }
+        """
+        properties = {}
+        required = []
+
+        for col in table.columns:
+            # Map SQL types to Gemini schema types
+            schema_type = self._sql_type_to_schema_type(col.data_type)
+            properties[col.name] = {"type": schema_type}
+
+            # Add to required if NOT NULL
+            if col.not_null or col.primary_key:
+                required.append(col.name)
+
+        return {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": properties,
+                "required": required,
+            },
+        }
+
+    def _sql_type_to_schema_type(self, sql_type: str) -> str:
+        """Map SQL data type to Gemini schema type.
+
+        Args:
+            sql_type: SQL data type (e.g., 'VARCHAR', 'INTEGER')
+
+        Returns:
+            Gemini schema type ('STRING', 'INTEGER', 'NUMBER', 'BOOLEAN')
+        """
+        sql_type_upper = sql_type.upper()
+
+        # Integer types
+        if any(
+            t in sql_type_upper
+            for t in ["INT", "SERIAL", "BIGINT", "SMALLINT", "TINYINT"]
+        ):
+            return "INTEGER"
+
+        # Numeric/decimal types
+        if any(
+            t in sql_type_upper
+            for t in ["DECIMAL", "NUMERIC", "FLOAT", "DOUBLE", "REAL", "MONEY"]
+        ):
+            return "NUMBER"
+
+        # Boolean types
+        if "BOOL" in sql_type_upper:
+            return "BOOLEAN"
+
+        # Everything else (VARCHAR, TEXT, DATE, TIMESTAMP, etc.) as STRING
+        return "STRING"
 
     def _build_generation_prompt(
         self,
