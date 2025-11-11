@@ -34,14 +34,19 @@ def test_json_generation():
     config = AppConfig.from_env()
     client = GeminiClient(config.gemini)
 
-    prompt = """Generate a JSON object with the following structure:
-    {
-        "message": "Hello from Gemini",
-        "numbers": [1, 2, 3],
-        "success": true
-    }"""
+    prompt = "Generate a simple greeting message with a list of 3 numbers and a success flag."
 
-    response = client.generate_json(prompt)
+    schema = {
+        "type": "OBJECT",
+        "properties": {
+            "message": {"type": "STRING"},
+            "numbers": {"type": "ARRAY", "items": {"type": "INTEGER"}},
+            "success": {"type": "BOOLEAN"}
+        },
+        "required": ["message", "numbers", "success"]
+    }
+
+    response = client.generate_json(prompt, schema)
     print(f"✓ JSON response: {response}")
     print(f"✓ Type: {type(response)}\n")
 
@@ -52,12 +57,7 @@ def test_json_streaming():
     config = AppConfig.from_env()
     client = GeminiClient(config.gemini)
 
-    prompt = """Generate a JSON array of 3 fruits with their colors:
-    [
-        {"name": "apple", "color": "red"},
-        {"name": "banana", "color": "yellow"},
-        {"name": "grape", "color": "purple"}
-    ]"""
+    prompt = "Generate an array of 3 fruits, each with a name and color property."
 
     print("✓ Streaming JSON: ", end="", flush=True)
     chunks = []
@@ -65,12 +65,19 @@ def test_json_streaming():
         print(chunk, end="", flush=True)
         chunks.append(chunk)
 
-    # Parse the complete JSON
+    # Parse the complete JSON (may need to strip markdown fences)
     import json
+    import re
 
     full_json = "".join(chunks)
+
+    # Strip markdown code fences if present
+    full_json = re.sub(r'^```json\s*', '', full_json)
+    full_json = re.sub(r'\s*```$', '', full_json)
+
     parsed = json.loads(full_json)
     print(f"\n✓ Parsed: {parsed}\n")
+    print(f"✓ Number of fruits: {len(parsed) if isinstance(parsed, list) else 'N/A'}\n")
 
 
 if __name__ == "__main__":
