@@ -392,3 +392,39 @@ class DatabaseManager:
                 row_count = cur.rowcount
                 logger.info(f"Inserted {row_count} row(s) into {qualified_table}")
                 return row_count
+
+    def execute_query_in_schema(
+        self, query: str, schema_name: str, params: Optional[Sequence] = None
+    ) -> List[dict]:
+        """Execute SELECT query in a specific schema.
+
+        Args:
+            query: SQL SELECT query to execute
+            schema_name: Schema to execute query in
+            params: Optional query parameters
+
+        Returns:
+            List of dicts with query results
+        """
+        with self.get_connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                # Set search_path to target schema
+                cur.execute(
+                    psycopg.sql.SQL("SET search_path TO {}, public").format(
+                        psycopg.sql.Identifier(schema_name)
+                    )
+                )
+
+                # Execute query
+                if params:
+                    cur.execute(query, params)
+                else:
+                    cur.execute(query)
+
+                results = cur.fetchall()
+                logger.info(f"Query returned {len(results)} row(s) from schema {schema_name}")
+
+                # Reset search_path
+                cur.execute("SET search_path TO public")
+
+                return results

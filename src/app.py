@@ -9,19 +9,21 @@ PHASE 1 - Data Generation (✅ COMPLETE):
   - [x] Wire to show_data_generation_tab() - lines 182-418
   - Status: Ready to test with GCP authentication
 
-PHASE 2 - Chat Interface (Not Implemented Yet):
-  - [ ] NL2SQL converter (src/tools/nl2sql.py)
-  - [ ] Guardrails (src/tools/guardrails.py)
-  - [ ] Visualizer (src/tools/visualizer.py)
-  - [ ] Wire to show_chat_tab() - lines 421-460
+PHASE 2 - Chat Interface (🚀 IN PROGRESS):
+  - [x] NL2SQL converter (src/tools/nl2sql.py)
+  - [x] SQL Guardrails (src/tools/sql_guardrails.py)
+  - [ ] Visualizer (src/tools/visualizer.py) - Optional for later
+  - [x] Wire to show_chat_tab() - lines 564-653
 
 Current Status: Phase 1 MVP complete, awaiting GCP setup for testing.
 See .claude/PLAN.md for detailed task breakdown and .claude/STATUS.md for current task.
 """
 
 import logging
+import time
 import traceback
 import uuid
+import pandas as pd
 import streamlit as st
 
 from utils.config import AppConfig
@@ -31,6 +33,8 @@ from utils.langfuse_instrumentation import initialize_langfuse, flush_langfuse
 from utils.security_guard import SecurityGuard
 from tools.ddl_parser import DDLParser
 from tools.data_generator import DataGenerator
+from tools.nl2sql import NL2SQLConverter
+from tools.sql_guardrails import SQLGuardrails
 
 # Configure logging
 logging.basicConfig(
@@ -562,14 +566,20 @@ def show_data_generation_tab(config: AppConfig, db_manager: DatabaseManager):
 
 
 def show_chat_tab(config: AppConfig, db_manager: DatabaseManager):
-    """Display Talk to your data tab."""
+    """Display chat interface for natural language querying."""
+
+    # Initialize session state
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    if "result_limit" not in st.session_state:
+        st.session_state.result_limit = 1000
 
     st.markdown("# 💬 Chat with Your Slop")
     st.markdown("_Ask me anything about your data - I speak both English and SQL!_")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Dataset selector
+    # Dataset selector + Result limit slider
     try:
         schemas = db_manager.list_schemas(prefix="slop_")
         if schemas:
@@ -581,7 +591,7 @@ def show_chat_tab(config: AppConfig, db_manager: DatabaseManager):
                     schema_names[0] if schema_names else None
                 )
 
-            col1, col2 = st.columns([3, 2])
+            col1, col2, col3 = st.columns([3, 2, 2])
             with col1:
                 selected_schema = st.selectbox(
                     "🗄️ Dataset",
@@ -605,32 +615,72 @@ def show_chat_tab(config: AppConfig, db_manager: DatabaseManager):
                     if schema_info:
                         st.caption(f"📊 {schema_info['table_count']} tables")
 
+            with col3:
+                result_limit = st.slider(
+                    "Max rows",
+                    min_value=10,
+                    max_value=5000,
+                    value=st.session_state.result_limit,
+                    step=10,
+                    help="Maximum number of rows to return",
+                )
+                st.session_state.result_limit = result_limit
+
             st.markdown("---")
         else:
             st.warning(
                 "⚠️ No saved datasets found. Generate and save data in the 'Slop Generator' tab first!"
             )
             st.markdown("---")
+            return
     except Exception as e:
         logger.error(f"Failed to load dataset list: {str(e)}", exc_info=True)
         st.error(f"❌ Failed to load datasets: {str(e)}")
         st.markdown("---")
+        return
 
-    # Chat history placeholder
+    # Display chat history
     st.markdown("### 💭 Conversation")
 
-    chat_container = st.container()
-    with chat_container:
+    if st.session_state.chat_history:
+        for message in st.session_state.chat_history:
+            if message["role"] == "user":
+                st.markdown(f"**🧑 You:** {message['content']}")
+            elif message["role"] == "assistant":
+                st.markdown(f"**🤖 SQLop:** {message.get('explanation', '')}")
+
+                # Show SQL query
+                if "sql_query" in message:
+                    st.code(message["sql_query"], language="sql")
+
+                # Show results
+                if "results" in message and message["results"] is not None:
+                    df = message["results"]
+                    row_count = len(df)
+
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+                    st.caption(f"📊 {row_count} rows • Query took {message.get('execution_time', 0):.2f}s")
+
+                    # Truncation warning
+                    if "was_truncated" in message and message["was_truncated"]:
+                        st.warning(f"⚠️ Results limited to {st.session_state.result_limit} rows")
+
+                # Show error if any
+                if "error" in message:
+                    st.error(f"❌ {message['error']}")
+
+            st.markdown("---")
+    else:
         st.info("👋 Hey! Ready to dig through your data slop? Ask away!")
 
         # Example questions
         with st.expander("💡 Try asking me...", expanded=True):
             st.markdown(
                 """
-            - "Show me the juiciest customers by revenue"
-            - "What's the average order value - give it to me straight"
-            - "Plot the sales rollercoaster for 2024"
-            - "Which products are the biggest flops?"
+            - "Show me the top 10 customers by revenue"
+            - "What's the average order value?"
+            - "Which products have the most sales?"
+            - "Count the number of orders per customer"
             """
             )
 
@@ -641,15 +691,115 @@ def show_chat_tab(config: AppConfig, db_manager: DatabaseManager):
     with col1:
         user_question = st.text_input(
             "Ask a question",
-            placeholder="What's cooking? e.g., 'Show me the freshest sales data by region'",
+            placeholder="What's cooking? e.g., 'Show me the top 5 most popular items'",
             label_visibility="collapsed",
+            key="chat_input",
         )
     with col2:
         send_btn = st.button("🍴 Serve", type="primary", use_container_width=True)
 
+    # Process user question
     if send_btn and user_question:
-        st.info(f"🔍 Searching the slop: {user_question}")
-        st.warning("🚧 Still training the chef!")
+        selected_schema = st.session_state.selected_schema
+
+        if not selected_schema:
+            st.error("⚠️ Please select a dataset first!")
+            return
+
+        # Add user message to history
+        st.session_state.chat_history.append({
+            "role": "user",
+            "content": user_question
+        })
+
+        try:
+            with st.spinner("🍳 Cooking up your query..."):
+                # Initialize components
+                gemini_client = get_gemini_client(config, setup_langfuse(config))
+                nl2sql = NL2SQLConverter(gemini_client, db_manager)
+                guardrails = SQLGuardrails()
+
+                # Convert question to SQL with conversation history
+                nl2sql_result = nl2sql.convert_to_sql(
+                    question=user_question,
+                    schema_name=selected_schema,
+                    conversation_history=st.session_state.chat_history[:-1]  # Exclude current question
+                )
+
+                sql_query = nl2sql_result["sql_query"]
+                explanation = nl2sql_result.get("explanation", "Here are your results:")
+                confidence = nl2sql_result.get("confidence", 0.0)
+
+                # Validate SQL with guardrails
+                is_safe, reason = guardrails.validate_query(sql_query)
+
+                if not is_safe:
+                    # Query blocked by guardrails
+                    logger.warning(f"Query blocked by guardrails: {reason}")
+                    st.session_state.chat_history.append({
+                        "role": "assistant",
+                        "content": explanation,
+                        "sql_query": sql_query,
+                        "error": f"Security check failed: {reason}",
+                        "results": None
+                    })
+                    st.rerun()
+                    return
+
+                # Add LIMIT clause
+                sql_query = guardrails.add_limit_clause(
+                    sql_query,
+                    max_rows=st.session_state.result_limit
+                )
+
+                # Execute query
+                start_time = time.time()
+                results = db_manager.execute_query_in_schema(sql_query, selected_schema)
+                execution_time = time.time() - start_time
+
+                # Convert to DataFrame
+                df = pd.DataFrame(results) if results else pd.DataFrame()
+
+                # Check if results were truncated
+                was_truncated = len(df) >= st.session_state.result_limit
+
+                # Add assistant response to history
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "content": explanation,
+                    "sql_query": sql_query,
+                    "results": df,
+                    "row_count": len(df),
+                    "execution_time": execution_time,
+                    "confidence": confidence,
+                    "was_truncated": was_truncated
+                })
+
+                logger.info(f"Query executed successfully: {len(df)} rows in {execution_time:.2f}s")
+                st.rerun()
+
+        except ValueError as e:
+            # NL2SQL or validation error
+            logger.error(f"Query generation failed: {str(e)}", exc_info=True)
+            st.session_state.chat_history.append({
+                "role": "assistant",
+                "content": "Sorry, I couldn't understand that question.",
+                "error": str(e),
+                "results": None
+            })
+            st.rerun()
+
+        except Exception as e:
+            # Database or other error
+            logger.error(f"Query execution failed: {str(e)}", exc_info=True)
+            st.session_state.chat_history.append({
+                "role": "assistant",
+                "content": "Oops! Something went wrong while executing your query.",
+                "sql_query": sql_query if 'sql_query' in locals() else None,
+                "error": str(e),
+                "results": None
+            })
+            st.rerun()
 
 
 if __name__ == "__main__":
