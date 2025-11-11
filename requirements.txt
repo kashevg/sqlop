@@ -13,5 +13,7 @@ matplotlib>=3.7.0
 sqlparse>=0.4.4
 python-dotenv>=1.0.0
 
-# Optional observability
-langfuse>=2.0.0
+# Observability and security
+langfuse>=2.0.0,<3.0.0
+openinference-instrumentation-vertexai>=0.1.0
+llm-guard>=0.3.0

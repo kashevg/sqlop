@@ -37,11 +37,23 @@ class GeminiConfig:
 
 
 @dataclass
+class LangfuseConfig:
+    """Langfuse observability configuration."""
+
+    public_key: str
+    secret_key: str
+    host: str
+    environment: str = "development"
+    enabled: bool = True
+
+
+@dataclass
 class AppConfig:
     """Main application configuration."""
 
     database: DatabaseConfig
     gemini: GeminiConfig
+    langfuse: LangfuseConfig
     data_dir: str
 
     @classmethod
@@ -69,9 +81,19 @@ class AppConfig:
                 "Either GCP_PROJECT_ID or GOOGLE_API_KEY must be set in environment"
             )
 
+        # Langfuse config (optional)
+        langfuse_enabled = os.getenv("LANGFUSE_ENABLED", "true").lower() == "true"
+        langfuse = LangfuseConfig(
+            public_key=os.getenv("LANGFUSE_PUBLIC_KEY", ""),
+            secret_key=os.getenv("LANGFUSE_SECRET_KEY", ""),
+            host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
+            environment=os.getenv("LANGFUSE_TRACING_ENVIRONMENT", "development"),
+            enabled=langfuse_enabled and bool(os.getenv("LANGFUSE_PUBLIC_KEY")),
+        )
+
         data_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data"
         )
         os.makedirs(data_dir, exist_ok=True)
 
-        return cls(database=database, gemini=gemini, data_dir=data_dir)
+        return cls(database=database, gemini=gemini, langfuse=langfuse, data_dir=data_dir)
