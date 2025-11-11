@@ -8,6 +8,7 @@ import json
 from typing import Any, Dict, Generator, List, Optional
 
 import pandas as pd
+from langfuse.decorators import observe
 
 from tools.ddl_parser import DDLParser, Table
 from utils.gemini_client import GeminiClient
@@ -25,6 +26,7 @@ class DataGenerator:
         self.gemini = gemini_client
         self.generated_data: Dict[str, pd.DataFrame] = {}
 
+    @observe()
     def generate_all_tables(
         self,
         tables: Dict[str, Table],

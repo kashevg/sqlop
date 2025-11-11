@@ -9,6 +9,7 @@ from typing import Any, Dict, Generator, Optional
 
 from google import genai
 from google.genai import types
+from langfuse.decorators import observe
 
 from utils.config import GeminiConfig
 
@@ -16,13 +17,15 @@ from utils.config import GeminiConfig
 class GeminiClient:
     """Wrapper for Google Gemini API with support for streaming and structured output."""
 
-    def __init__(self, config: GeminiConfig):
+    def __init__(self, config: GeminiConfig, enable_tracing: bool = True):
         """Initialize Gemini client with given configuration.
 
         Args:
             config: GeminiConfig with model settings and authentication
+            enable_tracing: Whether to enable Langfuse tracing (default: True)
         """
         self.config = config
+        self.enable_tracing = enable_tracing
 
         # Initialize client based on authentication method
         if self.config.is_vertex_ai():
@@ -36,6 +39,7 @@ class GeminiClient:
             # API key authentication
             self._client = genai.Client(api_key=self.config.api_key)
 
+    @observe()
     def generate_text(
         self,
         prompt: str,
@@ -61,13 +65,14 @@ class GeminiClient:
 
         if stream:
             return self._generate_streaming(prompt, generation_config)
-        else:
-            response = self._client.models.generate_content(
-                model=self.config.model,
-                contents=prompt,
-                config=generation_config,
-            )
-            return response.text
+
+        response = self._client.models.generate_content(
+            model=self.config.model,
+            contents=prompt,
+            config=generation_config,
+        )
+
+        return response.text
 
     def _generate_streaming(
         self, prompt: str, config: types.GenerateContentConfig
@@ -91,6 +96,7 @@ class GeminiClient:
             if chunk.text:
                 yield chunk.text
 
+    @observe()
     def generate_json(
         self,
         prompt: str,

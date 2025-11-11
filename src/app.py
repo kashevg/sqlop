@@ -21,11 +21,14 @@ See .claude/PLAN.md for detailed task breakdown and .claude/STATUS.md for curren
 
 import logging
 import traceback
+import uuid
 import streamlit as st
 
 from utils.config import AppConfig
 from utils.db import DatabaseManager
 from utils.gemini_client import GeminiClient
+from utils.langfuse_instrumentation import initialize_langfuse, flush_langfuse
+from utils.security_guard import SecurityGuard
 from tools.ddl_parser import DDLParser
 from tools.data_generator import DataGenerator
 
@@ -43,6 +46,12 @@ def get_config() -> AppConfig:
 
 
 @st.cache_resource
+def setup_langfuse(_config: AppConfig) -> bool:
+    """Initialize Langfuse tracing (cached singleton)."""
+    return initialize_langfuse(_config)
+
+
+@st.cache_resource
 def get_db_manager(_config: AppConfig) -> DatabaseManager:
     """Get database manager (cached)."""
     db_manager = DatabaseManager(_config.database)
@@ -51,9 +60,15 @@ def get_db_manager(_config: AppConfig) -> DatabaseManager:
 
 
 @st.cache_resource
-def get_gemini_client(_config: AppConfig) -> GeminiClient:
+def get_gemini_client(_config: AppConfig, _langfuse_enabled: bool) -> GeminiClient:
     """Get Gemini client (cached)."""
-    return GeminiClient(_config.gemini)
+    return GeminiClient(_config.gemini, enable_tracing=_langfuse_enabled)
+
+
+@st.cache_resource
+def get_security_guard(_langfuse_enabled: bool) -> SecurityGuard:
+    """Get security guard (cached)."""
+    return SecurityGuard(enable_tracing=_langfuse_enabled)
 
 
 def check_database_connection(db_manager: DatabaseManager) -> tuple[bool, str]:
@@ -148,13 +163,21 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # Initialize config and database
+    # Initialize config, Langfuse, and database
     try:
         config = get_config()
+        langfuse_enabled = setup_langfuse(config)
         db_manager = get_db_manager(config)
+        # Initialize shared resources (cached)
+        get_gemini_client(config, langfuse_enabled)
+        get_security_guard(langfuse_enabled)
     except Exception as e:
         st.error(f"⚠️ Configuration error: {e}")
         st.stop()
+
+    # Initialize session ID for tracing
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
 
     # Sidebar
     with st.sidebar:
