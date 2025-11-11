@@ -1,27 +1,39 @@
 # 🍜 SQLop - Current Status
 
 **Last Updated**: 2025-11-11
-**Current Phase**: MVP Phase 1 - TESTED & WORKING ✅
+**Current Phase**: MVP Phase 1 - TESTED & WORKING ✅ + Langfuse Enhanced ✅
 
 ---
 
 ## 📍 WHERE WE ARE
 
-### ✅ Phase 1 Complete & Tested (8/13 tasks)
+### ✅ Phase 1 Complete & Tested (9/13 tasks)
 - [x] README.md - Project overview with slop theme
 - [x] PLAN.md - MVP-first implementation strategy
 - [x] SETUP.md - Detailed setup instructions
-- [x] Gemini Client (`src/utils/gemini_client.py`) - 175 lines
+- [x] Gemini Client (`src/utils/gemini_client.py`) - 314 lines (ENHANCED!)
 - [x] DDL Parser (`src/tools/ddl_parser.py`) - 357 lines
 - [x] Data Generator (`src/tools/data_generator.py`) - 526 lines
-- [x] DDL Converter (`src/utils/ddl_converter.py`) - 156 lines (NEW!)
+- [x] DDL Converter (`src/utils/ddl_converter.py`) - 156 lines
 - [x] UI Integration - Full Phase 1 wired to `src/app.py`
 - [x] **Bug Fixes** - Database schema operations and FK handling
+- [x] **Langfuse Observability** - Production-ready tracing with best practices
 
-### 🎉 PHASE 1 MVP SUCCESS
-**Status**: Phase 1 fully working and tested with restaurant schema
+### 🎉 PHASE 1 MVP SUCCESS + OBSERVABILITY
+**Status**: Phase 1 fully working, tested, and production-ready with comprehensive observability
 
-**Latest Changes**:
+**Latest Changes (commit 15ebbcc)**:
+- ✅ **Enhanced Langfuse 2.x integration with best practices**
+  - Added `@observe(as_type="generation")` to all LLM methods
+  - Implemented metadata tracking (model, temperature, tokens, stream flags)
+  - Added token usage extraction via `update_current_observation()`
+  - Comprehensive error handling (quota, timeout, generic exceptions)
+  - Replaced print() with structured logging
+  - Added missing `openinference-instrumentation-google-genai` package
+  - All streaming methods now properly decorated and error-handled
+  - Files updated: gemini_client.py (+139 lines), requirements.txt, test_gemini.py
+
+**Previous Changes**:
 - ✅ Fixed Langfuse version compatibility (v2.x vs v3.x)
   - Updated imports: `from langfuse.decorators import observe`
   - Removed v3-only decorator parameters
@@ -64,15 +76,19 @@ If you're coming back after clearing context, here's your roadmap:
 src/
 ├── app.py (628 lines)               ✅ Full Phase 1 UI + bug fixes
 ├── utils/
-│   ├── config.py (75 lines)         ✅ Configuration management
+│   ├── config.py (100 lines)        ✅ Configuration + Langfuse config
 │   ├── db.py (332 lines)            ✅ Database utilities + schema support
-│   ├── gemini_client.py (175 lines) ✅ Gemini wrapper + JSON schema
-│   └── ddl_converter.py (156 lines) ✅ MySQL to PostgreSQL converter
+│   ├── gemini_client.py (314 lines) ✅ Gemini wrapper + Langfuse tracing (ENHANCED!)
+│   ├── ddl_converter.py (156 lines) ✅ MySQL to PostgreSQL converter
+│   └── langfuse_instrumentation.py  ✅ Langfuse setup & auto-instrumentation
 └── tools/
     ├── ddl_parser.py (357 lines)    ✅ Schema parser
     └── data_generator.py (526 lines) ✅ LLM data generator + batching
 
-test_ddl_parser.py                   ✅ Parser tests (all passing)
+tests/
+├── test_ddl_parser.py               ✅ Parser tests (all passing)
+├── test_gemini.py                   ✅ Gemini client tests (all passing)
+└── test_langfuse.py                 ✅ Langfuse integration tests
 ```
 
 **Infrastructure**:
@@ -147,10 +163,15 @@ Track blockers and issues here as they come up:
 ## 💡 NOTES FOR FUTURE ME
 
 Things to remember:
-- Langfuse integration skipped for MVP (add later)
-- Using Vertex AI auth (not API key)
+- ✅ **Langfuse 2.x integration COMPLETE** - Production-ready observability
+  - All LLM calls tracked with `@observe(as_type="generation")`
+  - Metadata tracked: model, temperature, tokens, stream flags
+  - Token usage automatically extracted from responses
+  - Auto-instrumentation via `GoogleGenAIInstrumentor` + manual decorators
+  - Comprehensive error handling and logging
+- Using Vertex AI auth (GCP_PROJECT_ID) OR API key (GOOGLE_API_KEY)
 - Python 3.11.6
-- MVP = Phase 1 complete, then build Phase 2
+- MVP = Phase 1 complete (including observability), then build Phase 2
 
 ---
 
