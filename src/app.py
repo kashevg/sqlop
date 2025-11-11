@@ -53,10 +53,15 @@ def setup_langfuse(_config: AppConfig) -> bool:
 
 @st.cache_resource
 def get_db_manager(_config: AppConfig) -> DatabaseManager:
-    """Get database manager (cached)."""
+    """Get database manager (cached).
+
+    Uses generator pattern to ensure connection pool is closed on cleanup.
+    """
     db_manager = DatabaseManager(_config.database)
     db_manager.initialize()
-    return db_manager
+    yield db_manager
+    # Cleanup runs when cache is cleared or app exits
+    db_manager.close()
 
 
 @st.cache_resource

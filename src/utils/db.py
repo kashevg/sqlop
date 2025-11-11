@@ -2,7 +2,7 @@
 
 import logging
 from contextlib import contextmanager
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence
 
 import psycopg
 from psycopg.rows import dict_row
@@ -65,20 +65,24 @@ class DatabaseManager:
                 statements = [s.strip() for s in ddl.split(";") if s.strip()]
                 for statement in statements:
                     cur.execute(statement)
-                conn.commit()
                 logger.info(f"Executed {len(statements)} DDL statement(s)")
 
-    def execute_query(self, query: str, params: Optional[Tuple] = None) -> List[dict]:
+    def execute_query(self, query: str, params: Optional[Sequence] = None) -> List[dict]:
         """Execute SELECT query and return results as list of dicts."""
         with self.get_connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(query, params)
                 results = cur.fetchall()
-                logger.info(f"Query returned {len(results)} row(s)")
+                logger.debug(f"Query returned {len(results)} row(s)")
                 return results
 
     def execute_insert(self, table: str, data: List[dict]) -> int:
-        """Bulk insert data into a table."""
+        """Bulk insert data into a table in the public schema.
+
+        Note: PostgreSQL lowercases unquoted identifiers, so we lowercase
+        table and column names when using quoted identifiers to match the
+        actual names in the database.
+        """
         if not data:
             return 0
 
@@ -87,22 +91,24 @@ class DatabaseManager:
                 # Get column names from first record
                 columns = list(data[0].keys())
                 placeholders = ", ".join(["%s"] * len(columns))
-                # Quote column names to handle reserved keywords and special characters
-                column_names = ", ".join([f'"{col}"' for col in columns])
+
+                # Lowercase identifiers to match PostgreSQL's behavior
+                table_lower = table.lower()
+                columns_lower = [col.lower() for col in columns]
+                column_names = ", ".join([f'"{col}"' for col in columns_lower])
 
                 insert_query = (
-                    f'INSERT INTO "{table}" ({column_names}) VALUES ({placeholders})'
+                    f'INSERT INTO "{table_lower}" ({column_names}) VALUES ({placeholders})'
                 )
 
-                # Prepare data tuples
+                # Prepare data tuples (use original column names from data dict)
                 values = [tuple(row[col] for col in columns) for row in data]
 
                 # Execute batch insert
                 cur.executemany(insert_query, values)
-                conn.commit()
 
                 row_count = cur.rowcount
-                logger.info(f"Inserted {row_count} row(s) into {table}")
+                logger.info(f"Inserted {row_count} row(s) into {table_lower}")
                 return row_count
 
     def get_table_schema(self, table_name: Optional[str] = None) -> List[dict]:
@@ -155,8 +161,54 @@ class DatabaseManager:
                     END $$;
                 """
                 )
-                conn.commit()
                 logger.info("Dropped all tables")
+
+    def get_foreign_keys(self, schema_name: str = "public") -> List[dict]:
+        """Get foreign key relationships for a schema.
+
+        Args:
+            schema_name: Schema to get foreign keys from (default: 'public')
+
+        Returns:
+            List of dicts with foreign key info:
+            - table_name: Source table
+            - column_name: Source column
+            - foreign_table_name: Referenced table
+            - foreign_column_name: Referenced column
+            - constraint_name: Foreign key constraint name
+        """
+        query = """
+            SELECT
+                tc.table_name,
+                kcu.column_name,
+                ccu.table_name AS foreign_table_name,
+                ccu.column_name AS foreign_column_name,
+                tc.constraint_name
+            FROM information_schema.table_constraints AS tc
+            JOIN information_schema.key_column_usage AS kcu
+                ON tc.constraint_name = kcu.constraint_name
+                AND tc.table_schema = kcu.table_schema
+            JOIN information_schema.constraint_column_usage AS ccu
+                ON ccu.constraint_name = tc.constraint_name
+                AND ccu.table_schema = tc.table_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+                AND tc.table_schema = %s
+            ORDER BY tc.table_name, kcu.ordinal_position
+        """
+        return self.execute_query(query, (schema_name,))
+
+    def health_check(self) -> bool:
+        """Check if database connection is healthy.
+
+        Returns:
+            True if connection is healthy, False otherwise
+        """
+        try:
+            self.execute_query("SELECT 1")
+            return True
+        except Exception as e:
+            logger.error(f"Database health check failed: {e}")
+            return False
 
     # Schema management methods for dataset storage
 
@@ -174,7 +226,6 @@ class DatabaseManager:
                         psycopg.sql.Identifier(schema_name)
                     )
                 )
-                conn.commit()
                 logger.info(f"Created schema: {schema_name}")
 
     def schema_exists(self, schema_name: str) -> bool:
@@ -230,7 +281,6 @@ class DatabaseManager:
                         psycopg.sql.Identifier(schema_name)
                     )
                 )
-                conn.commit()
                 logger.info(f"Dropped schema: {schema_name}")
 
     def get_schema_tables(self, schema_name: str) -> List[str]:
@@ -254,9 +304,17 @@ class DatabaseManager:
     def execute_ddl_in_schema(self, ddl: str, schema_name: str) -> None:
         """Execute DDL statements in a specific schema.
 
+        Note: DDL must be valid PostgreSQL syntax with tables defined in
+        dependency order (parent tables before child tables). Circular
+        foreign key dependencies should be handled with ALTER TABLE statements.
+
         Args:
-            ddl: DDL statements to execute
+            ddl: DDL statements to execute (valid PostgreSQL syntax)
             schema_name: Schema to create tables in
+
+        Raises:
+            psycopg.Error: If DDL execution fails (e.g., syntax errors,
+                          missing table references, circular dependencies)
         """
         with self.get_connection() as conn:
             with conn.cursor() as cur:
@@ -274,17 +332,23 @@ class DatabaseManager:
                 try:
                     # Split by semicolon and execute each statement
                     statements = [s.strip() for s in ddl.split(";") if s.strip()]
-                    for statement in statements:
-                        cur.execute(statement)
+                    for idx, statement in enumerate(statements, 1):
+                        try:
+                            cur.execute(statement)
+                        except Exception as stmt_error:
+                            # Include the failing statement in error context
+                            logger.error(
+                                f"Statement {idx}/{len(statements)} failed in schema {schema_name}: {stmt_error}\n"
+                                f"Failing SQL:\n{statement[:500]}"  # Limit to 500 chars
+                            )
+                            raise
 
-                    conn.commit()
                     logger.info(
                         f"Executed {len(statements)} DDL statement(s) in schema {schema_name}"
                     )
                 finally:
                     # Restore original search_path to avoid pool contamination
                     cur.execute(f"SET search_path TO {original_search_path}")
-                    conn.commit()
 
     def execute_insert_in_schema(
         self, table: str, data: List[dict], schema_name: str
@@ -324,7 +388,6 @@ class DatabaseManager:
 
                 # Execute batch insert
                 cur.executemany(insert_query, values)
-                conn.commit()
 
                 row_count = cur.rowcount
                 logger.info(f"Inserted {row_count} row(s) into {qualified_table}")
