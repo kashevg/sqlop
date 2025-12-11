@@ -19,6 +19,7 @@ Current Status: Phase 1 MVP complete, awaiting GCP setup for testing.
 See .claude/PLAN.md for detailed task breakdown and .claude/STATUS.md for current task.
 """
 
+import atexit
 import logging
 import time
 import traceback
@@ -35,6 +36,7 @@ from tools.ddl_parser import DDLParser
 from tools.data_generator import DataGenerator
 from tools.nl2sql import NL2SQLConverter
 from tools.sql_guardrails import SQLGuardrails
+from tools.visualizer import ChartVisualizer
 
 # Configure logging
 logging.basicConfig(
@@ -59,13 +61,15 @@ def setup_langfuse(_config: AppConfig) -> bool:
 def get_db_manager(_config: AppConfig) -> DatabaseManager:
     """Get database manager (cached).
 
-    Uses generator pattern to ensure connection pool is closed on cleanup.
+    Registers cleanup handler to close connection pool on app exit.
     """
     db_manager = DatabaseManager(_config.database)
     db_manager.initialize()
-    yield db_manager
-    # Cleanup runs when cache is cleared or app exits
-    db_manager.close()
+
+    # Register cleanup to run on app exit
+    atexit.register(db_manager.close)
+
+    return db_manager
 
 
 @st.cache_resource
@@ -661,6 +665,12 @@ def show_chat_tab(config: AppConfig, db_manager: DatabaseManager):
                     st.dataframe(df, use_container_width=True, hide_index=True)
                     st.caption(f"📊 {row_count} rows • Query took {message.get('execution_time', 0):.2f}s")
 
+                    # Show chart if available
+                    if "chart" in message and message["chart"] is not None:
+                        st.pyplot(message["chart"])
+                        chart_type = message.get("chart_type", "unknown")
+                        st.caption(f"📈 {chart_type.title()} Chart")
+
                     # Truncation warning
                     if "was_truncated" in message and message["was_truncated"]:
                         st.warning(f"⚠️ Results limited to {st.session_state.result_limit} rows")
@@ -686,20 +696,14 @@ def show_chat_tab(config: AppConfig, db_manager: DatabaseManager):
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Chat input at bottom
-    col1, col2 = st.columns([6, 1])
-    with col1:
-        user_question = st.text_input(
-            "Ask a question",
-            placeholder="What's cooking? e.g., 'Show me the top 5 most popular items'",
-            label_visibility="collapsed",
-            key="chat_input",
-        )
-    with col2:
-        send_btn = st.button("🍴 Serve", type="primary", use_container_width=True)
+    # Chat input at bottom (submits on Enter)
+    user_question = st.chat_input(
+        placeholder="What's cooking? e.g., 'Show me the top 5 most popular items'",
+        key="chat_input",
+    )
 
     # Process user question
-    if send_btn and user_question:
+    if user_question:
         selected_schema = st.session_state.selected_schema
 
         if not selected_schema:
@@ -763,6 +767,20 @@ def show_chat_tab(config: AppConfig, db_manager: DatabaseManager):
                 # Check if results were truncated
                 was_truncated = len(df) >= st.session_state.result_limit
 
+                # Generate chart if data is available
+                chart_fig = None
+                chart_type = "none"
+                chart_error_msg = None
+                if not df.empty:
+                    try:
+                        visualizer = ChartVisualizer(enable_tracing=setup_langfuse(config))
+                        chart_fig, chart_type = visualizer.create_chart(df, title=user_question[:50])
+                        logger.info(f"Generated {chart_type} chart for results")
+                    except Exception as chart_error:
+                        chart_error_msg = str(chart_error)
+                        logger.warning(f"Chart generation failed: {chart_error}", exc_info=True)
+                        # Continue without chart - charts are optional
+
                 # Add assistant response to history
                 st.session_state.chat_history.append({
                     "role": "assistant",
@@ -772,7 +790,9 @@ def show_chat_tab(config: AppConfig, db_manager: DatabaseManager):
                     "row_count": len(df),
                     "execution_time": execution_time,
                     "confidence": confidence,
-                    "was_truncated": was_truncated
+                    "was_truncated": was_truncated,
+                    "chart": chart_fig,
+                    "chart_type": chart_type
                 })
 
                 logger.info(f"Query executed successfully: {len(df)} rows in {execution_time:.2f}s")

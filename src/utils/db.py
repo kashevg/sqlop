@@ -111,8 +111,21 @@ class DatabaseManager:
                 logger.info(f"Inserted {row_count} row(s) into {table_lower}")
                 return row_count
 
-    def get_table_schema(self, table_name: Optional[str] = None) -> List[dict]:
-        """Get schema information for tables."""
+    def get_table_schema(
+        self,
+        table_name: Optional[str] = None,
+        schema_name: str = "public"
+    ) -> List[dict]:
+        """Get schema information for tables.
+
+        Args:
+            table_name: Optional specific table name to filter
+            schema_name: Schema name to query (default: "public")
+
+        Returns:
+            List of dicts with column metadata (table_name, column_name,
+            data_type, is_nullable, column_default)
+        """
         query = """
             SELECT
                 table_name,
@@ -121,14 +134,14 @@ class DatabaseManager:
                 is_nullable,
                 column_default
             FROM information_schema.columns
-            WHERE table_schema = 'public'
+            WHERE table_schema = %s
         """
 
         if table_name:
             query += " AND table_name = %s"
-            params = (table_name,)
+            params = (schema_name, table_name)
         else:
-            params = None
+            params = (schema_name,)
 
         query += " ORDER BY table_name, ordinal_position"
 
