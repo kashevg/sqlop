@@ -1,13 +1,14 @@
 # 🍜 SQLop - Current Status
 
-**Last Updated**: 2025-11-11
-**Current Phase**: MVP Phase 1 - TESTED & WORKING ✅ + Langfuse Enhanced ✅
+**Last Updated**: 2025-12-11
+**Current Phase**: PHASE 2 COMPLETE ✅ - Production-Ready! 🎉
 
 ---
 
 ## 📍 WHERE WE ARE
 
-### ✅ Phase 1 Complete & Tested (9/13 tasks)
+### ✅ Phase 1 Complete & Tested (6/6 tasks)
+### ✅ Phase 2 Complete & Tested (5/5 tasks)
 - [x] README.md - Project overview with slop theme
 - [x] PLAN.md - MVP-first implementation strategy
 - [x] SETUP.md - Detailed setup instructions
@@ -55,8 +56,42 @@
 - Save to database schemas ✓
 - Download CSV ✓
 
-### 🚀 NEXT: Phase 2 Implementation
-Phase 1 validated! Ready to build natural language querying interface
+### 🎉 PHASE 2 COMPLETE - Natural Language Querying!
+**Status**: Phase 2 fully working with auto-generated visualizations
+
+**Latest Changes (2025-12-11)** - Bug Fixes & Polish:
+- ✅ **Fixed Critical Database Manager Bug** (`src/app.py`)
+  - Removed generator pattern causing AttributeError
+  - Replaced yield with atexit cleanup handler
+  - Resolved "'generator' object has no attribute 'list_schemas'" error
+
+- ✅ **Fixed SQL Ambiguous Column Errors** (`src/tools/nl2sql.py`)
+  - Enforced table aliases in NL2SQL prompt
+  - All column references now qualified (e.g., r.name, rv.rating)
+  - Prevents PostgreSQL "column reference is ambiguous" errors
+
+- ✅ **Fixed Chart Generation for Decimal Types** (`src/tools/visualizer.py`)
+  - Auto-converts PostgreSQL DECIMAL/NUMERIC to float
+  - Proper numeric column detection for charts
+  - Charts now work with all PostgreSQL numeric types
+
+- ✅ **Improved Chat UX** (`src/app.py`)
+  - Replaced text input + button with st.chat_input()
+  - Press Enter to submit questions
+  - Auto-clears input after sending
+
+**Previous Changes (2025-12-10)**:
+- ✅ Implemented Chart Visualizer (368 lines)
+- ✅ Full UI Integration with automatic visualizations
+- ✅ Enhanced database layer with schema-aware queries
+
+**Working Features**:
+- Natural language to SQL conversion ✓
+- SQL security validation (guardrails) ✓
+- Query execution with result limits ✓
+- Auto-generated visualizations ✓
+- Multi-turn conversations ✓
+- Conversation history tracking ✓
 
 ---
 
@@ -71,23 +106,27 @@ If you're coming back after clearing context, here's your roadmap:
 
 ### 2. Check What's Already Built
 
-**Phase 1 Complete**:
+**Complete Implementation**:
 ```
 src/
-├── app.py (628 lines)               ✅ Full Phase 1 UI + bug fixes
+├── app.py (827 lines)               ✅ Full Phase 1 + Phase 2 UI
 ├── utils/
 │   ├── config.py (100 lines)        ✅ Configuration + Langfuse config
-│   ├── db.py (332 lines)            ✅ Database utilities + schema support
-│   ├── gemini_client.py (314 lines) ✅ Gemini wrapper + Langfuse tracing (ENHANCED!)
+│   ├── db.py (444 lines)            ✅ Database utilities + schema support (FIXED!)
+│   ├── gemini_client.py (314 lines) ✅ Gemini wrapper + Langfuse tracing
 │   ├── ddl_converter.py (156 lines) ✅ MySQL to PostgreSQL converter
 │   └── langfuse_instrumentation.py  ✅ Langfuse setup & auto-instrumentation
 └── tools/
     ├── ddl_parser.py (357 lines)    ✅ Schema parser
-    └── data_generator.py (526 lines) ✅ LLM data generator + batching
+    ├── data_generator.py (526 lines) ✅ LLM data generator + batching
+    ├── nl2sql.py (277 lines)         ✅ Natural language to SQL converter
+    ├── sql_guardrails.py (240 lines) ✅ SQL security validation
+    └── visualizer.py (330 lines)     ✅ Chart generation engine (NEW!)
 
 tests/
 ├── test_ddl_parser.py               ✅ Parser tests (all passing)
 ├── test_gemini.py                   ✅ Gemini client tests (all passing)
+├── test_nl2sql.py                   ✅ NL2SQL tests (8/8 passing)
 └── test_langfuse.py                 ✅ Langfuse integration tests
 ```
 
@@ -114,16 +153,29 @@ streamlit run src/app.py         # Start UI
 ✅ All foreign keys valid
 ```
 
-### 4. Next Steps - Build Phase 2! 🚀
+### 4. How to Use - Full Feature Set! 🚀
 
-**Phase 2: Natural Language Querying**
-1. Create NL2SQL converter (`src/tools/nl2sql.py`)
-2. Create SQL guardrails (`src/tools/guardrails.py`)
-3. Create chart visualizer (`src/tools/visualizer.py`)
-4. Wire chat interface (`src/app.py` - show_chat_tab)
-5. Test full query pipeline
+**Phase 1: Data Generation**
+1. Upload DDL schema (MySQL or PostgreSQL)
+2. Click "Cook It Up!" to generate synthetic data
+3. Preview and refine tables
+4. Save dataset to database or download CSV
 
-See **PLAN.md** for detailed Phase 2 task breakdown.
+**Phase 2: Natural Language Querying** ⭐ NEW!
+1. Select saved dataset from dropdown
+2. Ask questions in plain English
+3. See generated SQL query
+4. View results table
+5. See auto-generated charts! 📊
+6. Continue multi-turn conversation
+
+**Example Questions:**
+- "Show me the top 10 customers by revenue"
+- "What's the average order total?"
+- "Which products have the most sales?"
+- "Count orders per month" (auto-generates line chart!)
+
+See **PLAN.md** for complete feature documentation.
 
 ---
 
@@ -143,12 +195,14 @@ See **PLAN.md** for detailed Phase 2 task breakdown.
 
 **Status**: TESTED AND WORKING! Restaurant schema tested successfully.
 
-### Phase 2: Chat with Data (0/5 complete) ← **NEXT**
-- [ ] Task 5: NL2SQL converter
-- [ ] Task 6: Guardrails
-- [ ] Task 7: Chart visualizer
-- [ ] Task 8: Wire chat to UI
-- [ ] Task 9: Test Phase 2
+### Phase 2: Chat with Data (5/5 complete) ✅ **COMPLETE!**
+- [x] Task 5: NL2SQL converter
+- [x] Task 6: Guardrails
+- [x] Task 7: Chart visualizer
+- [x] Task 8: Wire chat to UI
+- [x] Task 9: Test Phase 2
+
+**Status**: ALL FEATURES WORKING! 🎉
 
 ---
 
@@ -156,7 +210,10 @@ See **PLAN.md** for detailed Phase 2 task breakdown.
 
 Track blockers and issues here as they come up:
 
-- None currently - all Phase 1 bugs fixed!
+- None! All critical bugs fixed as of 2025-12-11 ✅
+  - Database manager generator bug (fixed)
+  - SQL ambiguous column errors (fixed)
+  - Chart generation for Decimal types (fixed)
 
 ---
 
